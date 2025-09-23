@@ -1,0 +1,84 @@
+{
+  "institutions": [
+    {
+      "name": "Harvard University",
+      "country": "US",
+      "verification_endpoint": "https://harvard.edu/verify",
+      "contact_email": "registrar@harvard.edu",
+      "is_verified": true
+    },
+    {
+      "name": "Stanford University",
+      "country": "US",
+      "verification_endpoint": "https://stanford.edu/verify",
+      "contact_email": "registrar@stanford.edu",
+      "is_verified": true
+    },
+    {
+      "name": "MIT",
+      "country": "US",
+      "verification_endpoint": "https://mit.edu/verify",
+      "contact_email": "registrar@mit.edu",
+      "is_verified": true
+    }
+  ],
+  "demo_certificates": [
+    {
+      "filename": "harvard_cs_degree.pdf",
+      "institution": "Harvard University",
+      "student_name": "John Smith",
+      "degree": "Bachelor of Science in Computer Science",
+      "graduation_date": "2023-05-25",
+      "gpa": "3.85",
+      "status": "verified",
+      "confidence_score": 98.5,
+      "tamper_score": 1.2
+    },
+    {
+      "filename": "stanford_mba.pdf",
+      "institution": "Stanford University",
+      "student_name": "Sarah Johnson",
+      "degree": "Master of Business Administration",
+      "graduation_date": "2023-06-15",
+      "gpa": "3.92",
+      "status": "verified",
+      "confidence_score": 97.8,
+      "tamper_score": 1.5
+    },
+    {
+      "filename": "fake_certificate.pdf",
+      "institution": "Unknown University",
+      "student_name": "Bob Wilson",
+      "degree": "Bachelor of Arts",
+      "graduation_date": "2023-12-01",
+      "gpa": "4.0",
+      "status": "failed",
+      "confidence_score": 23.1,
+      "tamper_score": 15.7
+    }
+  ],
+  "demo_users": [
+    {
+      "email": "student@demo.com",
+      "password": "demo123",
+      "role": "student",
+      "first_name": "Demo",
+      "last_name": "Student"
+    },
+    {
+      "email": "hr@demo.com",
+      "password": "demo123",
+      "role": "hr",
+      "first_name": "Demo",
+      "last_name": "HR Manager",
+      "organization": "Tech Corp"
+    },
+    {
+      "email": "admin@demo.com",
+      "password": "demo123",
+      "role": "admin",
+      "first_name": "Demo",
+      "last_name": "Administrator"
+    }
+  ]
+}

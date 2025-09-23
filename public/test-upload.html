@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Upload API</title>
+</head>
+<body>
+    <h1>Test Certificate Upload</h1>
+    <form id="uploadForm">
+        <input type="file" id="fileInput" accept=".pdf,.jpg,.jpeg,.png" required>
+        <br><br>
+        <button type="submit">Upload Certificate</button>
+    </form>
+    
+    <div id="result"></div>
+
+    <script>
+        document.getElementById('uploadForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const fileInput = document.getElementById('fileInput');
+            const file = fileInput.files[0];
+            
+            if (!file) {
+                alert('Please select a file');
+                return;
+            }
+            
+            const formData = new FormData();
+            formData.append('files', file);
+            formData.append('ocr_enabled', 'true');
+            formData.append('ocr_language', 'eng');
+            
+            try {
+                document.getElementById('result').innerHTML = 'Uploading...';
+                
+                const response = await fetch('/api/certificates/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const result = await response.json();
+                
+                if (response.ok) {
+                    document.getElementById('result').innerHTML = `
+                        <h3>Success!</h3>
+                        <p>Job ID: ${result.job_id}</p>
+                        <p>Status: ${result.status}</p>
+                        <p>Message: ${result.message}</p>
+                        <a href="/verification/results/${result.job_id}" target="_blank">View Results</a>
+                    `;
+                } else {
+                    document.getElementById('result').innerHTML = `
+                        <h3>Error!</h3>
+                        <p>${result.error}</p>
+                    `;
+                }
+            } catch (error) {
+                document.getElementById('result').innerHTML = `
+                    <h3>Network Error!</h3>
+                    <p>${error.message}</p>
+                `;
+            }
+        });
+    </script>
+</body>
+</html>

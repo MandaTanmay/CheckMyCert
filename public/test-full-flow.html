@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Certificate Upload and Verification</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .section { margin: 20px 0; padding: 20px; border: 1px solid #ccc; border-radius: 8px; }
+        .success { background-color: #d4edda; color: #155724; }
+        .error { background-color: #f8d7da; color: #721c24; }
+        .info { background-color: #d1ecf1; color: #0c5460; }
+        button { padding: 10px 20px; margin: 10px 0; cursor: pointer; }
+        input[type="file"] { margin: 10px 0; }
+        .result { margin: 10px 0; padding: 10px; border-radius: 4px; }
+    </style>
+</head>
+<body>
+    <h1>Certificate Upload and Database Verification Test</h1>
+    
+    <div class="section">
+        <h2>Step 1: Test Database API</h2>
+        <button onclick="testDatabaseAPI()">Test Database Verification API</button>
+        <div id="dbApiResult"></div>
+    </div>
+    
+    <div class="section">
+        <h2>Step 2: Upload Certificate</h2>
+        <input type="file" id="fileInput" accept=".pdf,.jpg,.jpeg,.png">
+        <br>
+        <button onclick="uploadCertificate()">Upload and Verify Certificate</button>
+        <div id="uploadResult"></div>
+    </div>
+    
+    <div class="section">
+        <h2>Step 3: Test Results</h2>
+        <p>Enter a job ID to test verification results:</p>
+        <input type="text" id="jobIdInput" placeholder="Enter job ID" style="width: 300px;">
+        <br>
+        <button onclick="testResults()">Get Verification Results</button>
+        <div id="resultsTest"></div>
+    </div>
+
+    <script>
+        async function testDatabaseAPI() {
+            const resultDiv = document.getElementById('dbApiResult');
+            resultDiv.innerHTML = 'Testing database API...';
+            
+            try {
+                // Test GET first
+                const getResponse = await fetch('/api/database/verify');
+                const getResult = await getResponse.json();
+                
+                if (getResponse.ok) {
+                    resultDiv.innerHTML = `
+                        <div class="result success">
+                            <h4>✅ Database API is accessible</h4>
+                            <p>${getResult.message}</p>
+                            <small>Database: ${getResult.database_path}</small>
+                        </div>
+                    `;
+                    
+                    // Test POST with sample data
+                    const testData = {
+                        extractedFields: {
+                            studentName: { value: "manoj" },
+                            institution: { value: "SRKR" },
+                            degree: { value: "BTech" },
+                            graduationDate: { value: "2025-09-24" },
+                            certificateNumber: { value: "889889889" }
+                        },
+                        jobId: "test_" + Date.now()
+                    };
+                    
+                    const postResponse = await fetch('/api/database/verify', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(testData)
+                    });
+                    
+                    const postResult = await postResponse.json();
+                    
+                    if (postResponse.ok) {
+                        const verification = postResult.verification_result;
+                        resultDiv.innerHTML += `
+                            <div class="result success">
+                                <h4>✅ Database Verification Test Successful</h4>
+                                <p><strong>Match Found:</strong> ${verification.database_match ? 'Yes' : 'No'}</p>
+                                <p><strong>Confidence:</strong> ${verification.confidence_score}%</p>
+                                <p><strong>Status:</strong> ${verification.verification_status}</p>
+                                ${verification.matched_record ? `<p><strong>Matched Student:</strong> ${verification.matched_record.student_name}</p>` : ''}
+                            </div>
+                        `;
+                    } else {
+                        resultDiv.innerHTML += `
+                            <div class="result error">
+                                <h4>❌ Database Verification Failed</h4>
+                                <p>${postResult.error}</p>
+                            </div>
+                        `;
+                    }
+                } else {
+                    resultDiv.innerHTML = `
+                        <div class="result error">
+                            <h4>❌ Database API not accessible</h4>
+                            <p>${getResult.error}</p>
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `
+                    <div class="result error">
+                        <h4>❌ Network Error</h4>
+                        <p>${error.message}</p>
+                    </div>
+                `;
+            }
+        }
+        
+        async function uploadCertificate() {
+            const fileInput = document.getElementById('fileInput');
+            const resultDiv = document.getElementById('uploadResult');
+            
+            if (!fileInput.files[0]) {
+                resultDiv.innerHTML = '<div class="result error">Please select a file first</div>';
+                return;
+            }
+            
+            resultDiv.innerHTML = 'Uploading certificate...';
+            
+            try {
+                const formData = new FormData();
+                formData.append('files', fileInput.files[0]);
+                formData.append('ocr_enabled', 'true');
+                formData.append('ocr_language', 'eng');
+                formData.append('database_check', 'true');
+                
+                const response = await fetch('/api/certificates/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const result = await response.json();
+                
+                if (response.ok) {
+                    resultDiv.innerHTML = `
+                        <div class="result success">
+                            <h4>✅ Upload Successful</h4>
+                            <p><strong>Job ID:</strong> ${result.job_id}</p>
+                            <p><strong>Status:</strong> ${result.status}</p>
+                            <p><strong>Confidence:</strong> ${result.confidence}%</p>
+                            <a href="/verification/results/${result.job_id}" target="_blank">
+                                <button>View Results Page</button>
+                            </a>
+                        </div>
+                    `;
+                    
+                    // Auto-fill the job ID for testing
+                    document.getElementById('jobIdInput').value = result.job_id;
+                } else {
+                    resultDiv.innerHTML = `
+                        <div class="result error">
+                            <h4>❌ Upload Failed</h4>
+                            <p>${result.error}</p>
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `
+                    <div class="result error">
+                        <h4>❌ Upload Error</h4>
+                        <p>${error.message}</p>
+                    </div>
+                `;
+            }
+        }
+        
+        async function testResults() {
+            const jobId = document.getElementById('jobIdInput').value;
+            const resultDiv = document.getElementById('resultsTest');
+            
+            if (!jobId) {
+                resultDiv.innerHTML = '<div class="result error">Please enter a job ID</div>';
+                return;
+            }
+            
+            resultDiv.innerHTML = 'Fetching verification results...';
+            
+            try {
+                const response = await fetch(`/api/verification/results/${jobId}`);
+                const result = await response.json();
+                
+                if (response.ok) {
+                    resultDiv.innerHTML = `
+                        <div class="result success">
+                            <h4>✅ Results Found</h4>
+                            <p><strong>Status:</strong> ${result.status}</p>
+                            <p><strong>Overall Confidence:</strong> ${result.overallConfidence}%</p>
+                            <p><strong>Database Match:</strong> ${result.databaseMatch ? 'Yes' : 'No'}</p>
+                            <p><strong>Extracted Fields:</strong> ${result.extractedFields.length}</p>
+                            ${result.databaseVerification ? `
+                                <p><strong>DB Verification:</strong> ${result.databaseVerification.verification_status} (${result.databaseVerification.confidence_score}%)</p>
+                            ` : ''}
+                            <a href="/verification/results/${jobId}" target="_blank">
+                                <button>Open Results Page</button>
+                            </a>
+                        </div>
+                    `;
+                } else {
+                    resultDiv.innerHTML = `
+                        <div class="result error">
+                            <h4>❌ Results Not Found</h4>
+                            <p>${result.error}</p>
+                            <p>This usually means the job ID doesn't exist or has expired.</p>
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `
+                    <div class="result error">
+                        <h4>❌ Error Fetching Results</h4>
+                        <p>${error.message}</p>
+                    </div>
+                `;
+            }
+        }
+    </script>
+</body>
+</html>
