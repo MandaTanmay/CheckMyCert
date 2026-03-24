@@ -1,7 +1,24 @@
 import os
 import importlib.util
 from pathlib import Path
-from decouple import config
+
+try:
+    from decouple import config as decouple_config  # type: ignore[reportMissingImports]
+except ImportError:
+    def config(key, default=None, cast=str):
+        value = os.getenv(key)
+        if value is None:
+            return default
+
+        if cast is bool:
+            return value.strip().lower() in ('1', 'true', 'yes', 'on')
+
+        if callable(cast):
+            return cast(value)
+
+        return value
+else:
+    config = decouple_config
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -75,16 +92,31 @@ TEMPLATES = [
 WSGI_APPLICATION = 'checkmycert.wsgi.application'
 
 # Database
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.postgresql',
-        'NAME': config('DB_NAME', default='checkmycert'),
-        'USER': config('DB_USER', default='checkmycert'),
-        'PASSWORD': config('DB_PASSWORD', default='checkmycert_password'),
-        'HOST': config('DB_HOST', default='localhost'),
-        'PORT': config('DB_PORT', default='5432'),
+DB_ENGINE = config('DB_ENGINE', default='sqlite').strip().lower()
+
+if DB_ENGINE in ('postgres', 'postgresql'):
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.postgresql',
+            'NAME': config('DB_NAME', default='checkmycert'),
+            'USER': config('DB_USER', default='checkmycert'),
+            'PASSWORD': config('DB_PASSWORD', default='checkmycert_password'),
+            'HOST': config('DB_HOST', default='localhost'),
+            'PORT': config('DB_PORT', default='5432'),
+            'CONN_MAX_AGE': config('DB_CONN_MAX_AGE', default=60, cast=int),
+            'OPTIONS': {
+                'sslmode': config('DB_SSLMODE', default='require'),
+                'connect_timeout': config('DB_CONNECT_TIMEOUT', default=10, cast=int),
+            },
+        }
     }
-}
+else:
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': config('SQLITE_DB_PATH', default=str(BASE_DIR / 'db.sqlite3')),
+        }
+    }
 
 # Password validation
 AUTH_PASSWORD_VALIDATORS = [
