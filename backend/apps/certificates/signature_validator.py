@@ -1,8 +1,15 @@
 import PyPDF2
 from cryptography import x509
 from cryptography.hazmat.backends import default_backend
-from cryptography.x509.verification import PolicyBuilder, StoreBuilder
 import logging
+
+try:
+    from cryptography.x509.verification import PolicyBuilder, StoreBuilder
+    HAS_X509_VERIFICATION = True
+except ImportError:
+    PolicyBuilder = None
+    StoreBuilder = None
+    HAS_X509_VERIFICATION = False
 
 logger = logging.getLogger(__name__)
 
@@ -136,6 +143,10 @@ class SignatureValidator:
         Verify certificate chain against trusted CAs
         """
         try:
+            if not HAS_X509_VERIFICATION:
+                logger.warning("cryptography.x509.verification is unavailable; skipping trust-chain verification")
+                return False
+
             # Build certificate chain
             certificates = []
             for cert_data in certificate_chain:

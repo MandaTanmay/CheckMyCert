@@ -1,4 +1,5 @@
 import os
+import importlib.util
 from pathlib import Path
 from decouple import config
 
@@ -34,8 +35,10 @@ LOCAL_APPS = [
     'apps.users',
     'apps.certificates',
     'apps.institutions',
-    'apps.verification',
 ]
+
+if importlib.util.find_spec('apps.verification') is not None:
+    LOCAL_APPS.append('apps.verification')
 
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
 

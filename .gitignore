@@ -28,3 +28,11 @@ next-env.d.ts
 
 # temporary storage
 .tmp/
+
+# python virtual environments
+.venv/
+.venv_run/
+venv/
+env/
+ENV/
+backend/.venv_run/
