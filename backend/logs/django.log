@@ -729,3 +729,5 @@ Unable to queue certificate verification task: [WinError 10061] No connection co
 Unable to queue certificate verification task: [WinError 10061] No connection could be made because the target machine actively refused it
 D:\PROJECTS\CheckMyCert\CheckMyCert\backend\apps\certificates\views.py changed, reloading.
 Watching for file changes with StatReloader
+D:\PROJECTS\CheckMyCert\CheckMyCert\backend\apps\verification\services\field_parser.py changed, reloading.
+Watching for file changes with StatReloader
