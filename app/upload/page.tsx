@@ -27,6 +27,30 @@ interface ProcessingStep {
   message?: string
 }
 
+const extractErrorMessage = (payload: unknown): string | null => {
+  if (!payload) return null
+  if (typeof payload === "string") return payload
+
+  if (Array.isArray(payload)) {
+    for (const item of payload) {
+      const nested = extractErrorMessage(item)
+      if (nested) return nested
+    }
+    return null
+  }
+
+  if (typeof payload === "object") {
+    const record = payload as Record<string, unknown>
+    for (const value of Object.values(record)) {
+      const nested = extractErrorMessage(value)
+      if (nested) return nested
+    }
+    return null
+  }
+
+  return null
+}
+
 export default function UploadPage() {
   const { user } = useUser()
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([])
@@ -104,9 +128,8 @@ export default function UploadPage() {
       const formData = new FormData()
 
       // Add files
-      uploadedFiles.forEach((uploadedFile, index) => {
-        formData.append("files", uploadedFile.file)
-      })
+      // Backend upload endpoint expects a single file field named "file".
+      formData.append("file", uploadedFiles[0].file)
 
       // Add processing options
       formData.append("ocr_language", selectedLanguage)
@@ -129,7 +152,11 @@ export default function UploadPage() {
         let message = "Failed to upload certificate"
         try {
           const errorData = await uploadResponse.json()
-          message = errorData?.error || errorData?.detail || message
+          message =
+            errorData?.error ||
+            errorData?.detail ||
+            extractErrorMessage(errorData) ||
+            message
         } catch {
           // Use default message when backend response is not JSON.
         }

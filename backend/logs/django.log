@@ -731,3 +731,185 @@ D:\PROJECTS\CheckMyCert\CheckMyCert\backend\apps\certificates\views.py changed, 
 Watching for file changes with StatReloader
 D:\PROJECTS\CheckMyCert\CheckMyCert\backend\apps\verification\services\field_parser.py changed, reloading.
 Watching for file changes with StatReloader
+Watching for file changes with StatReloader
+Unauthorized: /api/auth/me/
+Not Found: /favicon.ico
+Bad Request: /api/auth/register/
+Bad Request: /api/auth/register/
+Bad Request: /api/auth/register/
+Bad Request: /api/auth/register/
+Bad Request: /api/auth/register/
+Bad Request: /api/certificates/upload/
+Method Not Allowed: /api/auth/login/
+Bad Request: /api/certificates/upload/
+No hostname was supplied. Reverting to default 'localhost'
+Unable to queue certificate verification task: [WinError 10061] No connection could be made because the target machine actively refused it
+Storage can not find an available filename for "certificates/7fd958f6-871e-4600-ab27-82359c76b784/ed7f81f8-2d96-4c11-8e5d-905b1dc3386d\WhatsApp_Image_2026-03-25_at_8.07.23_PM_0ci8BLa.jpeg". Please make sure that the corresponding file field allows sufficient "max_length".
+Traceback (most recent call last):
+  File "D:\PROJECTS\CheckMyCert\CheckMyCert\backend\.venv\Lib\site-packages\django\core\handlers\exception.py", line 55, in inner
+    response = get_response(request)
+               ^^^^^^^^^^^^^^^^^^^^^
+  File "D:\PROJECTS\CheckMyCert\CheckMyCert\backend\.venv\Lib\site-packages\django\core\handlers\base.py", line 197, in _get_response
+    response = wrapped_callback(request, *callback_args, **callback_kwargs)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\PROJECTS\CheckMyCert\CheckMyCert\backend\.venv\Lib\site-packages\django\views\decorators\csrf.py", line 56, in wrapper_view
+    return view_func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\PROJECTS\CheckMyCert\CheckMyCert\backend\.venv\Lib\site-packages\django\views\generic\base.py", line 104, in view
+    return self.dispatch(request, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\PROJECTS\CheckMyCert\CheckMyCert\backend\.venv\Lib\site-packages\rest_framework\views.py", line 509, in dispatch
+    response = self.handle_exception(exc)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\PROJECTS\CheckMyCert\CheckMyCert\backend\.venv\Lib\site-packages\rest_framework\views.py", line 469, in handle_exception
+    self.raise_uncaught_exception(exc)
+  File "D:\PROJECTS\CheckMyCert\CheckMyCert\backend\.venv\Lib\site-packages\rest_framework\views.py", line 480, in raise_uncaught_exception
+    raise exc
+  File "D:\PROJECTS\CheckMyCert\CheckMyCert\backend\.venv\Lib\site-packages\rest_framework\views.py", line 506, in dispatch
+    response = handler(request, *args, **kwargs)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\PROJECTS\CheckMyCert\CheckMyCert\backend\.venv\Lib\site-packages\rest_framework\generics.py", line 190, in post
+    return self.create(request, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\PROJECTS\CheckMyCert\CheckMyCert\backend\apps\certificates\views.py", line 28, in create
+    certificate = serializer.save()
+                  ^^^^^^^^^^^^^^^^^
+  File "D:\PROJECTS\CheckMyCert\CheckMyCert\backend\.venv\Lib\site-packages\rest_framework\serializers.py", line 212, in save
+    self.instance = self.create(validated_data)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\PROJECTS\CheckMyCert\CheckMyCert\backend\apps\certificates\serializers.py", line 14, in create
+    return super().create(validated_data)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\PROJECTS\CheckMyCert\CheckMyCert\backend\.venv\Lib\site-packages\rest_framework\serializers.py", line 962, in create
+    instance = ModelClass._default_manager.create(**validated_data)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\PROJECTS\CheckMyCert\CheckMyCert\backend\.venv\Lib\site-packages\django\db\models\manager.py", line 87, in manager_method
+    return getattr(self.get_queryset(), name)(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\PROJECTS\CheckMyCert\CheckMyCert\backend\.venv\Lib\site-packages\django\db\models\query.py", line 658, in create
+    obj.save(force_insert=True, using=self.db)
+  File "D:\PROJECTS\CheckMyCert\CheckMyCert\backend\.venv\Lib\site-packages\django\db\models\base.py", line 814, in save
+    self.save_base(
+  File "D:\PROJECTS\CheckMyCert\CheckMyCert\backend\.venv\Lib\site-packages\django\db\models\base.py", line 877, in save_base
+    updated = self._save_table(
+              ^^^^^^^^^^^^^^^^^
+  File "D:\PROJECTS\CheckMyCert\CheckMyCert\backend\.venv\Lib\site-packages\django\db\models\base.py", line 1020, in _save_table
+    results = self._do_insert(
+              ^^^^^^^^^^^^^^^^
+  File "D:\PROJECTS\CheckMyCert\CheckMyCert\backend\.venv\Lib\site-packages\django\db\models\base.py", line 1061, in _do_insert
+    return manager._insert(
+           ^^^^^^^^^^^^^^^^
+  File "D:\PROJECTS\CheckMyCert\CheckMyCert\backend\.venv\Lib\site-packages\django\db\models\manager.py", line 87, in manager_method
+    return getattr(self.get_queryset(), name)(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\PROJECTS\CheckMyCert\CheckMyCert\backend\.venv\Lib\site-packages\django\db\models\query.py", line 1805, in _insert
+    return query.get_compiler(using=using).execute_sql(returning_fields)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\PROJECTS\CheckMyCert\CheckMyCert\backend\.venv\Lib\site-packages\django\db\models\sql\compiler.py", line 1821, in execute_sql
+    for sql, params in self.as_sql():
+                       ^^^^^^^^^^^^^
+  File "D:\PROJECTS\CheckMyCert\CheckMyCert\backend\.venv\Lib\site-packages\django\db\models\sql\compiler.py", line 1745, in as_sql
+    value_rows = [
+                 ^
+  File "D:\PROJECTS\CheckMyCert\CheckMyCert\backend\.venv\Lib\site-packages\django\db\models\sql\compiler.py", line 1746, in <listcomp>
+    [
+  File "D:\PROJECTS\CheckMyCert\CheckMyCert\backend\.venv\Lib\site-packages\django\db\models\sql\compiler.py", line 1747, in <listcomp>
+    self.prepare_value(field, self.pre_save_val(field, obj))
+                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\PROJECTS\CheckMyCert\CheckMyCert\backend\.venv\Lib\site-packages\django\db\models\sql\compiler.py", line 1695, in pre_save_val
+    return field.pre_save(obj, add=True)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\PROJECTS\CheckMyCert\CheckMyCert\backend\.venv\Lib\site-packages\django\db\models\fields\files.py", line 317, in pre_save
+    file.save(file.name, file.file, save=False)
+  File "D:\PROJECTS\CheckMyCert\CheckMyCert\backend\.venv\Lib\site-packages\django\db\models\fields\files.py", line 93, in save
+    self.name = self.storage.save(name, content, max_length=self.field.max_length)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\PROJECTS\CheckMyCert\CheckMyCert\backend\.venv\Lib\site-packages\django\core\files\storage\base.py", line 37, in save
+    name = self.get_available_name(name, max_length=max_length)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\PROJECTS\CheckMyCert\CheckMyCert\backend\.venv\Lib\site-packages\django\core\files\storage\base.py", line 91, in get_available_name
+    raise SuspiciousFileOperation(
+django.core.exceptions.SuspiciousFileOperation: Storage can not find an available filename for "certificates/7fd958f6-871e-4600-ab27-82359c76b784/ed7f81f8-2d96-4c11-8e5d-905b1dc3386d\WhatsApp_Image_2026-03-25_at_8.07.23_PM_0ci8BLa.jpeg". Please make sure that the corresponding file field allows sufficient "max_length".
+Bad Request: /api/certificates/upload/
+D:\PROJECTS\CheckMyCert\CheckMyCert\backend\apps\certificates\models.py changed, reloading.
+Watching for file changes with StatReloader
+No hostname was supplied. Reverting to default 'localhost'
+Unable to queue certificate verification task: [WinError 10061] No connection could be made because the target machine actively refused it
+Not Found: /api/certificates/result/2c425c9f-fa69-475c-a747-00fe11e3768a/
+Not Found: /api/certificates/result/2c425c9f-fa69-475c-a747-00fe11e3768a/
+Not Found: /api/certificates/result/2c425c9f-fa69-475c-a747-00fe11e3768a/
+Not Found: /api/certificates/result/2c425c9f-fa69-475c-a747-00fe11e3768a/
+Not Found: /api/certificates/result/2c425c9f-fa69-475c-a747-00fe11e3768a/
+Not Found: /api/certificates/result/2c425c9f-fa69-475c-a747-00fe11e3768a/
+Not Found: /api/certificates/result/2c425c9f-fa69-475c-a747-00fe11e3768a/
+Not Found: /api/certificates/result/2c425c9f-fa69-475c-a747-00fe11e3768a/
+Not Found: /api/certificates/result/2c425c9f-fa69-475c-a747-00fe11e3768a/
+Not Found: /api/certificates/result/2c425c9f-fa69-475c-a747-00fe11e3768a/
+Not Found: /api/certificates/result/2c425c9f-fa69-475c-a747-00fe11e3768a/
+Not Found: /api/certificates/result/2c425c9f-fa69-475c-a747-00fe11e3768a/
+Not Found: /api/certificates/result/2c425c9f-fa69-475c-a747-00fe11e3768a/
+Not Found: /api/certificates/result/2c425c9f-fa69-475c-a747-00fe11e3768a/
+Not Found: /api/certificates/result/2c425c9f-fa69-475c-a747-00fe11e3768a/
+Not Found: /api/certificates/result/2c425c9f-fa69-475c-a747-00fe11e3768a/
+Not Found: /api/certificates/result/2c425c9f-fa69-475c-a747-00fe11e3768a/
+Not Found: /api/certificates/result/2c425c9f-fa69-475c-a747-00fe11e3768a/
+Not Found: /api/certificates/result/2c425c9f-fa69-475c-a747-00fe11e3768a/
+Not Found: /api/certificates/result/2c425c9f-fa69-475c-a747-00fe11e3768a/
+Not Found: /api/certificates/result/2c425c9f-fa69-475c-a747-00fe11e3768a/
+Not Found: /api/certificates/result/2c425c9f-fa69-475c-a747-00fe11e3768a/
+Not Found: /api/certificates/result/2c425c9f-fa69-475c-a747-00fe11e3768a/
+Not Found: /api/certificates/result/2c425c9f-fa69-475c-a747-00fe11e3768a/
+Not Found: /api/certificates/result/2c425c9f-fa69-475c-a747-00fe11e3768a/
+Not Found: /api/certificates/result/2c425c9f-fa69-475c-a747-00fe11e3768a/
+Not Found: /api/certificates/result/2c425c9f-fa69-475c-a747-00fe11e3768a/
+Not Found: /api/certificates/result/2c425c9f-fa69-475c-a747-00fe11e3768a/
+Not Found: /api/certificates/result/2c425c9f-fa69-475c-a747-00fe11e3768a/
+Not Found: /api/certificates/result/2c425c9f-fa69-475c-a747-00fe11e3768a/
+Not Found: /api/certificates/result/2c425c9f-fa69-475c-a747-00fe11e3768a/
+Not Found: /api/certificates/result/2c425c9f-fa69-475c-a747-00fe11e3768a/
+Not Found: /api/certificates/result/2c425c9f-fa69-475c-a747-00fe11e3768a/
+Not Found: /api/certificates/result/2c425c9f-fa69-475c-a747-00fe11e3768a/
+Not Found: /api/certificates/result/2c425c9f-fa69-475c-a747-00fe11e3768a/
+Not Found: /api/certificates/result/2c425c9f-fa69-475c-a747-00fe11e3768a/
+Not Found: /api/certificates/result/2c425c9f-fa69-475c-a747-00fe11e3768a/
+Not Found: /api/certificates/result/2c425c9f-fa69-475c-a747-00fe11e3768a/
+Not Found: /api/certificates/result/2c425c9f-fa69-475c-a747-00fe11e3768a/
+Not Found: /api/certificates/result/2c425c9f-fa69-475c-a747-00fe11e3768a/
+Not Found: /api/certificates/result/2c425c9f-fa69-475c-a747-00fe11e3768a/
+Not Found: /api/certificates/result/2c425c9f-fa69-475c-a747-00fe11e3768a/
+Not Found: /api/certificates/result/2c425c9f-fa69-475c-a747-00fe11e3768a/
+Not Found: /api/certificates/result/2c425c9f-fa69-475c-a747-00fe11e3768a/
+Not Found: /api/certificates/result/2c425c9f-fa69-475c-a747-00fe11e3768a/
+Not Found: /api/certificates/result/2c425c9f-fa69-475c-a747-00fe11e3768a/
+Not Found: /api/certificates/result/2c425c9f-fa69-475c-a747-00fe11e3768a/
+Not Found: /api/certificates/result/2c425c9f-fa69-475c-a747-00fe11e3768a/
+Not Found: /api/certificates/result/2c425c9f-fa69-475c-a747-00fe11e3768a/
+Not Found: /api/certificates/result/2c425c9f-fa69-475c-a747-00fe11e3768a/
+Not Found: /api/certificates/result/2c425c9f-fa69-475c-a747-00fe11e3768a/
+Not Found: /api/certificates/result/2c425c9f-fa69-475c-a747-00fe11e3768a/
+Not Found: /api/certificates/result/2c425c9f-fa69-475c-a747-00fe11e3768a/
+Not Found: /api/certificates/result/2c425c9f-fa69-475c-a747-00fe11e3768a/
+Not Found: /api/certificates/result/2c425c9f-fa69-475c-a747-00fe11e3768a/
+Unable to queue certificate verification task: [WinError 10061] No connection could be made because the target machine actively refused it
+Not Found: /api/certificates/result/52dae8a9-cabd-4bf7-ba3f-efaaa0698691/
+Not Found: /api/certificates/result/52dae8a9-cabd-4bf7-ba3f-efaaa0698691/
+Not Found: /api/certificates/result/52dae8a9-cabd-4bf7-ba3f-efaaa0698691/
+Not Found: /api/certificates/result/52dae8a9-cabd-4bf7-ba3f-efaaa0698691/
+Not Found: /api/certificates/result/52dae8a9-cabd-4bf7-ba3f-efaaa0698691/
+Not Found: /api/certificates/result/52dae8a9-cabd-4bf7-ba3f-efaaa0698691/
+Not Found: /api/certificates/result/52dae8a9-cabd-4bf7-ba3f-efaaa0698691/
+Not Found: /api/certificates/result/52dae8a9-cabd-4bf7-ba3f-efaaa0698691/
+Not Found: /api/certificates/result/52dae8a9-cabd-4bf7-ba3f-efaaa0698691/
+Not Found: /api/certificates/result/52dae8a9-cabd-4bf7-ba3f-efaaa0698691/
+Not Found: /api/certificates/result/52dae8a9-cabd-4bf7-ba3f-efaaa0698691/
+Not Found: /api/certificates/result/52dae8a9-cabd-4bf7-ba3f-efaaa0698691/
+Not Found: /api/certificates/result/52dae8a9-cabd-4bf7-ba3f-efaaa0698691/
+Not Found: /api/certificates/result/52dae8a9-cabd-4bf7-ba3f-efaaa0698691/
+Not Found: /api/certificates/result/52dae8a9-cabd-4bf7-ba3f-efaaa0698691/
+D:\PROJECTS\CheckMyCert\CheckMyCert\backend\apps\certificates\views.py changed, reloading.
+Watching for file changes with StatReloader
+Watching for file changes with StatReloader
+No hostname was supplied. Reverting to default 'localhost'
+Unable to queue certificate verification task: [WinError 10061] No connection could be made because the target machine actively refused it
+D:\PROJECTS\CheckMyCert\CheckMyCert\backend\apps\certificates\views.py changed, reloading.
+Watching for file changes with StatReloader

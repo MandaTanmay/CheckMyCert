@@ -4,9 +4,11 @@ from rest_framework.response import Response
 from rest_framework.parsers import MultiPartParser, FormParser
 from django.shortcuts import get_object_or_404
 from django.conf import settings
+from django.utils import timezone
 from celery.result import AsyncResult
 import logging
 import uuid
+import hashlib
 
 from .models import Certificate, VerificationResult, BulkVerificationJob
 from .serializers import (
@@ -38,10 +40,11 @@ class CertificateUploadView(generics.CreateAPIView):
             except Exception as exc:
                 # Keep upload successful even when Redis/RabbitMQ is unavailable.
                 logger.warning("Unable to queue certificate verification task: %s", exc)
+                self._ensure_fallback_result(certificate)
                 certificate.status = 'uploaded'
                 certificate.celery_task_id = None
                 certificate.save(update_fields=['status', 'celery_task_id'])
-                response_message = 'Certificate uploaded, but background processing queue is unavailable'
+                response_message = 'Certificate uploaded; background queue unavailable, generated a fallback verification result'
         else:
             # Demo mode - create mock result immediately
             from .utils import create_demo_result
@@ -52,6 +55,39 @@ class CertificateUploadView(generics.CreateAPIView):
             'status': certificate.status,
             'message': response_message
         }, status=status.HTTP_201_CREATED)
+
+    def _ensure_fallback_result(self, certificate):
+        """Create a minimal result so results page can load without Celery workers."""
+        existing = VerificationResult.objects.filter(certificate=certificate).first()
+        if existing:
+            return existing
+
+        fallback_hash = hashlib.sha256(
+            f"fallback:{certificate.id}:{certificate.user_id}:{timezone.now().isoformat()}".encode()
+        ).hexdigest()
+
+        return VerificationResult.objects.create(
+            certificate=certificate,
+            status='unverified',
+            overall_confidence=0,
+            extracted_text='',
+            extracted_fields={},
+            ocr_confidence=0,
+            tamper_detected=False,
+            tamper_confidence=0,
+            tamper_issues=[
+                {
+                    'type': 'processing_unavailable',
+                    'severity': 'medium',
+                    'description': 'Automatic verification is unavailable because background workers are not running.',
+                }
+            ],
+            database_match=False,
+            signature_valid=False,
+            signature_details={'reason': 'background_workers_unavailable'},
+            qr_token=f"qr_{uuid.uuid4().hex}",
+            verification_hash=fallback_hash,
+        )
 
 class CertificateStatusView(generics.RetrieveAPIView):
     permission_classes = [permissions.IsAuthenticated]
