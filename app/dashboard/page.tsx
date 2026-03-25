@@ -80,11 +80,11 @@ export default function DashboardPage() {
   const [dataLoading, setDataLoading] = useState(true)
 
   useEffect(() => {
-    if (user) {
+    if (user?.id) {
       // Load data asynchronously without blocking the UI
       fetchDashboardData()
     }
-  }, [user])
+  }, [user?.id, user?.role])
 
   const fetchDashboardData = async () => {
     try {

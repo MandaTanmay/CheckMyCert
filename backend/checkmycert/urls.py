@@ -27,5 +27,8 @@ if module_exists('apps.verification.urls'):
 if module_exists('apps.verification.public_urls'):
     urlpatterns.append(path('api/verify/', include('apps.verification.public_urls')))
 
+if module_exists('apps.dashboard.urls'):
+    urlpatterns.append(path('api/dashboard/', include('apps.dashboard.urls')))
+
 if settings.DEBUG:
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

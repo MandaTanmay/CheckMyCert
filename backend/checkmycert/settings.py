@@ -57,6 +57,9 @@ LOCAL_APPS = [
 if importlib.util.find_spec('apps.verification') is not None:
     LOCAL_APPS.append('apps.verification')
 
+if importlib.util.find_spec('apps.dashboard') is not None:
+    LOCAL_APPS.append('apps.dashboard')
+
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
 
 MIDDLEWARE = [
@@ -207,6 +210,15 @@ DATA_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024  # 10MB
 
 # Demo Mode
 DEMO_MODE = config('DEMO_MODE', default=False, cast=bool)
+
+# Verification scoring configuration
+CONFIDENCE_WEIGHT_OCR = config('CONFIDENCE_WEIGHT_OCR', default=0.2, cast=float)
+CONFIDENCE_WEIGHT_TAMPER = config('CONFIDENCE_WEIGHT_TAMPER', default=0.4, cast=float)
+CONFIDENCE_WEIGHT_DB_MATCH = config('CONFIDENCE_WEIGHT_DB_MATCH', default=0.3, cast=float)
+CONFIDENCE_WEIGHT_SIGNATURE = config('CONFIDENCE_WEIGHT_SIGNATURE', default=0.1, cast=float)
+
+VERDICT_THRESHOLD_VALID = config('VERDICT_THRESHOLD_VALID', default=80, cast=float)
+VERDICT_THRESHOLD_TAMPERED = config('VERDICT_THRESHOLD_TAMPERED', default=70, cast=float)
 
 # Logging
 LOGGING = {

@@ -10,6 +10,13 @@ import { CheckCircle, XCircle, AlertTriangle, Database, Shield } from "lucide-re
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Tabs } from "@/components/ui/tabs"
+
+interface VerificationResult {
+  id: string
+  status: string
+  [key: string]: unknown
+}
 
 // Enhanced verification result interface
 interface EnhancedVerificationResult extends VerificationResult {
@@ -38,9 +45,8 @@ const enhanceWithDatabase = async (verificationResult: VerificationResult): Prom
   try {
     const response = await fetch('/api/certificates/verify-with-database/', {
       method: 'POST',
-      headers: { 
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${localStorage.getItem('token')}` // If using JWT
+      headers: {
+        'Content-Type': 'application/json'
       },
       body: JSON.stringify(verificationResult)
     });
@@ -327,6 +333,22 @@ export default function EnhancedVerificationResultsPage({ params }: { params: { 
         </div>
       </div>
     )
+  }
+
+  const getStatusColor = () => {
+    switch (result.status) {
+      case 'valid':
+      case 'verified':
+        return 'bg-green-500 text-white'
+      case 'tampered':
+      case 'failed':
+        return 'bg-red-500 text-white'
+      case 'processing':
+      case 'pending':
+        return 'bg-yellow-500 text-white'
+      default:
+        return 'bg-gray-500 text-white'
+    }
   }
 
   return (

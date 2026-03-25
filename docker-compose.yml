@@ -37,7 +37,13 @@ services:
       dockerfile: Dockerfile
     environment:
       - DEBUG=1
-      - DATABASE_URL=postgresql://checkmycert:checkmycert_password@postgres:5432/checkmycert
+      - DB_ENGINE=postgres
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=checkmycert
+      - DB_USER=checkmycert
+      - DB_PASSWORD=checkmycert_password
+      - DB_SSLMODE=prefer
       - REDIS_URL=redis://redis:6379/0
       - SECRET_KEY=your-secret-key-here
       - ALLOWED_HOSTS=localhost,127.0.0.1,backend
@@ -64,7 +70,13 @@ services:
       dockerfile: Dockerfile
     environment:
       - DEBUG=1
-      - DATABASE_URL=postgresql://checkmycert:checkmycert_password@postgres:5432/checkmycert
+      - DB_ENGINE=postgres
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=checkmycert
+      - DB_USER=checkmycert
+      - DB_PASSWORD=checkmycert_password
+      - DB_SSLMODE=prefer
       - REDIS_URL=redis://redis:6379/0
       - SECRET_KEY=your-secret-key-here
     volumes:
@@ -84,6 +96,7 @@ services:
       dockerfile: Dockerfile
     environment:
       - NEXT_PUBLIC_API_URL=http://localhost:8000
+      - DJANGO_BASE_URL=http://backend:8000
       - NODE_ENV=development
     volumes:
       - ./frontend:/app

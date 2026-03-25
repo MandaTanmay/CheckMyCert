@@ -9,6 +9,7 @@ import { CheckCircle, XCircle, AlertTriangle, User, GraduationCap, Calendar, Map
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 interface DatabaseVerificationData {
   record_found: boolean;
@@ -21,7 +22,7 @@ interface DatabaseVerificationData {
     certificate_type: string;
     degree_program: string;
     major: string;
-    minor?: string;
+    minor?: string | null;
     gpa: number;
     enrollment_date: string;
     graduation_date: string;

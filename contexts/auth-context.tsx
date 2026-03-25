@@ -53,6 +53,108 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null)
   const [loading, setLoading] = useState(true)
 
+  const toNameParts = (displayName: string) => {
+    const parts = displayName.trim().split(/\s+/).filter(Boolean)
+    return {
+      firstName: parts[0] || "User",
+      lastName: parts.slice(1).join(" ") || "Account",
+    }
+  }
+
+  const toUsername = (email: string) => {
+    const normalized = email.trim().toLowerCase() || "user"
+    // Use the full email (sanitized) to avoid collisions like john@gmail and john@yahoo.
+    return normalized.replace(/[^a-zA-Z0-9_]/g, "_").slice(0, 150)
+  }
+
+  const extractFirstMessage = (value: unknown): string | null => {
+    if (!value) return null
+    if (typeof value === "string") return value
+
+    if (Array.isArray(value)) {
+      for (const item of value) {
+        const nested = extractFirstMessage(item)
+        if (nested) return nested
+      }
+      return null
+    }
+
+    if (typeof value === "object") {
+      for (const nestedValue of Object.values(value as Record<string, unknown>)) {
+        const nested = extractFirstMessage(nestedValue)
+        if (nested) return nested
+      }
+      return null
+    }
+
+    return null
+  }
+
+  const formatBackendError = (payload: any, fallbackMessage: string) => {
+    if (typeof payload === "string") {
+      return payload
+    }
+
+    const preferred = payload?.detail || payload?.message || payload?.error
+    if (preferred && typeof preferred === "string") {
+      if (preferred.includes("Non-JSON response from Django backend") && typeof payload?.raw === "string") {
+        return `${preferred}: ${payload.raw.slice(0, 300)}`
+      }
+      return preferred
+    }
+
+    if (typeof payload?.raw === "string") {
+      return payload.raw.slice(0, 300)
+    }
+
+    const extracted = extractFirstMessage(payload)
+    if (extracted) {
+      return extracted
+    }
+
+    return fallbackMessage
+  }
+
+  const syncDjangoLogin = async (email: string, password: string) => {
+    const response = await fetch("/api/auth/login", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ email, password }),
+    })
+
+    if (!response.ok) {
+      const payload = await response.json().catch(() => null)
+      throw new Error(formatBackendError(payload, "Django login failed"))
+    }
+  }
+
+  const syncDjangoRegister = async (email: string, password: string, displayName: string, role: UserRole) => {
+    const { firstName, lastName } = toNameParts(displayName)
+    const response = await fetch("/api/auth/register", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        email,
+        username: toUsername(email),
+        first_name: firstName,
+        last_name: lastName,
+        password,
+        password_confirm: password,
+        role,
+        organization: "",
+      }),
+    })
+
+    if (!response.ok) {
+      const payload = await response.json().catch(() => null)
+      throw new Error(formatBackendError(payload, "Django registration failed"))
+    }
+  }
+
   useEffect(() => {
     if (!isFirebaseConfigured) {
       console.warn("Firebase is not properly configured. Authentication features will be limited.")
@@ -123,6 +225,19 @@ export function AuthProvider({ children }: AuthProviderProps) {
       setLoading(true)
       const result = await signInWithEmailAndPassword(auth, email, password)
 
+      // Keep Django JWT cookies in sync with Firebase session.
+      try {
+        await syncDjangoLogin(email, password)
+      } catch {
+        await syncDjangoRegister(
+          email,
+          password,
+          result.user.displayName || email.split("@")[0] || "User Account",
+          "user",
+        )
+        await syncDjangoLogin(email, password)
+      }
+
       // Update last login asynchronously (non-blocking)
       if (db) {
         setDoc(
@@ -141,6 +256,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
       
     } catch (error) {
       console.error("Sign in error:", error)
+      await signOut(auth).catch(() => {
+        // Ignore Firebase cleanup failure on sign-in error.
+      })
       setLoading(false)
       throw error
     }
@@ -160,6 +278,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
       // Update the user's display name immediately
       await updateProfile(result.user, { displayName })
+
+      // Register the user in Django and set JWT cookies for BFF routes.
+      await syncDjangoRegister(email, password, displayName, role)
 
       // Create user profile in Firestore asynchronously (don't wait for it)
       // This allows the user to proceed while the profile is being created in the background
@@ -188,6 +309,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
       
     } catch (error) {
       console.error("Sign up error:", error)
+      await signOut(auth).catch(() => {
+        // Ignore Firebase cleanup failure on sign-up error.
+      })
       setLoading(false)
       throw error
     }
@@ -198,6 +322,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
     if (!auth) return
 
     try {
+      await fetch("/api/auth/logout", { method: "POST" }).catch(() => {
+        // Ignore logout network errors and continue local sign-out.
+      })
       await signOut(auth)
       setUser(null)
       setUserProfile(null)

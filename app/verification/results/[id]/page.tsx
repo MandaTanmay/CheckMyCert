@@ -81,8 +81,49 @@ interface VerificationResult {
   }>
 }
 
+function normalizeVerificationResult(payload: any): VerificationResult {
+  const extractedFields = Array.isArray(payload?.extractedFields)
+    ? payload.extractedFields
+    : Array.isArray(payload?.extracted_fields)
+      ? payload.extracted_fields
+      : []
+
+  const tamperIssues = Array.isArray(payload?.tamperIssues)
+    ? payload.tamperIssues
+    : Array.isArray(payload?.tamper_issues)
+      ? payload.tamper_issues
+      : []
+
+  const wordCoordinates = Array.isArray(payload?.wordCoordinates)
+    ? payload.wordCoordinates
+    : Array.isArray(payload?.word_coordinates)
+      ? payload.word_coordinates
+      : []
+
+  return {
+    id: String(payload?.id || ""),
+    status: payload?.status || "unverified",
+    overallConfidence: Number(payload?.overallConfidence ?? payload?.overall_confidence ?? 0),
+    extractedFields,
+    tamperIssues,
+    signatureValid: Boolean(payload?.signatureValid ?? payload?.signature_valid ?? false),
+    databaseMatch: Boolean(payload?.databaseMatch ?? payload?.database_match ?? false),
+    databaseVerification: payload?.databaseVerification ?? payload?.database_verification ?? null,
+    qrToken: payload?.qrToken || payload?.qr_token || "",
+    processedAt: payload?.processedAt || payload?.processed_at || payload?.created_at || new Date().toISOString(),
+    extractedText: payload?.extractedText || payload?.extracted_text || "",
+    ocrResult: payload?.ocrResult ?? payload?.ocr_result,
+    certificateImage: payload?.certificateImage ?? payload?.certificate_image ?? null,
+    certificateFilename:
+      payload?.certificateFilename ?? payload?.certificate_filename ?? payload?.certificate?.original_filename ?? null,
+    certificateMimetype: payload?.certificateMimetype ?? payload?.certificate_mimetype ?? payload?.certificate?.file_type ?? null,
+    wordCoordinates,
+  }
+}
+
 export default function VerificationResultsPage({ params }: { params: { id: string } }) {
   const [result, setResult] = useState<VerificationResult | null>(null)
+  const [activeTab, setActiveTab] = useState("fields")
   const [selectedField, setSelectedField] = useState<ExtractedField | null>(null)
   const [selectedIssue, setSelectedIssue] = useState<TamperIssue | null>(null)
   const [loading, setLoading] = useState(true)
@@ -96,17 +137,28 @@ export default function VerificationResultsPage({ params }: { params: { id: stri
   useEffect(() => {
     const fetchResults = async () => {
       try {
-        const response = await fetch(`/api/verification/results/${params.id}`)
-        if (response.ok) {
+        const maxAttempts = 20
+        let response: Response | null = null
+
+        for (let attempt = 0; attempt < maxAttempts; attempt++) {
+          response = await fetch(`/api/verification/results/${params.id}`)
+          if (response.ok) {
+            break
+          }
+          await new Promise((resolve) => setTimeout(resolve, 1000))
+        }
+
+        if (response?.ok) {
           const data = await response.json()
-          setResult(data)
-          
+          const normalized = normalizeVerificationResult(data)
+          setResult(normalized)
+
           // If we have result data but no database verification, try to fetch it
-          if (data && !data.databaseVerification && data.extractedFields && data.extractedFields.length > 0) {
-            fetchDatabaseVerification(data)
+          if (!normalized.databaseVerification && normalized.extractedFields.length > 0) {
+            fetchDatabaseVerification(normalized)
           }
         } else {
-          console.error("Failed to fetch results:", response.statusText)
+          console.error("Failed to fetch results after retries")
           setResult(null)
         }
       } catch (error) {
@@ -467,7 +519,7 @@ export default function VerificationResultsPage({ params }: { params: { id: stri
 
           {/* Details Panel */}
           <div className="space-y-6">
-            <Tabs defaultValue="fields" className="w-full">
+            <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
               <TabsList className="grid w-full grid-cols-5">
                 <TabsTrigger value="fields">Fields</TabsTrigger>
                 <TabsTrigger value="words">Words</TabsTrigger>

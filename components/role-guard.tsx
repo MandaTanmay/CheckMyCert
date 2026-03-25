@@ -1,6 +1,6 @@
 "use client"
 
-import type { ReactNode } from "react"
+import { useMemo, type ReactNode } from "react"
 import { Shield, Lock, AlertTriangle } from "lucide-react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -94,18 +94,30 @@ export function useUser() {
   const { user, userProfile, loading } = useAuth()
 
   // Don't wait for profile if we have a user - create a minimal user object
-  const minimalUser = user ? {
-    id: user.uid,
-    email: user.email || "",
-    role: (userProfile?.role || "user") as UserRole,
-    firstName: (userProfile?.displayName || user.displayName || "").split(" ")[0] || "",
-    lastName: (userProfile?.displayName || user.displayName || "").split(" ").slice(1).join(" ") || "",
-  } : null
+  const minimalUser = useMemo(() => {
+    if (!user) {
+      return null
+    }
 
-  return {
-    user: minimalUser,
-    loading: loading && !user, // Only show loading if we don't have a user yet
-  }
+    const displayName = userProfile?.displayName || user.displayName || ""
+    const nameParts = displayName.trim().split(/\s+/).filter(Boolean)
+
+    return {
+      id: user.uid,
+      email: user.email || "",
+      role: (userProfile?.role || "user") as UserRole,
+      firstName: nameParts[0] || "",
+      lastName: nameParts.slice(1).join(" ") || "",
+    }
+  }, [user?.uid, user?.email, user?.displayName, userProfile?.role, userProfile?.displayName])
+
+  return useMemo(
+    () => ({
+      user: minimalUser,
+      loading: loading && !user, // Only show loading if we don't have a user yet
+    }),
+    [minimalUser, loading, user],
+  )
 }
 
 // Component for role-specific content

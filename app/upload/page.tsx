@@ -101,7 +101,6 @@ export default function UploadPage() {
     setProcessingSteps(steps)
 
     try {
-      const token = localStorage.getItem("token")
       const formData = new FormData()
 
       // Add files
@@ -124,13 +123,17 @@ export default function UploadPage() {
       const uploadResponse = await fetch("/api/certificates/upload", {
         method: "POST",
         body: formData,
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
       })
 
       if (!uploadResponse.ok) {
-        throw new Error("Failed to upload certificate")
+        let message = "Failed to upload certificate"
+        try {
+          const errorData = await uploadResponse.json()
+          message = errorData?.error || errorData?.detail || message
+        } catch {
+          // Use default message when backend response is not JSON.
+        }
+        throw new Error(message)
       }
 
       const uploadResult = await uploadResponse.json()
@@ -174,10 +177,20 @@ export default function UploadPage() {
 
       setUploadProgress(100)
 
-      // Redirect to results
-      setTimeout(() => {
-        window.location.href = `/verification/results/${uploadResult.job_id}`
-      }, 1000)
+      // Wait briefly for async result creation, then navigate.
+      const waitForResultReady = async (id: string, maxAttempts = 15) => {
+        for (let attempt = 0; attempt < maxAttempts; attempt++) {
+          const response = await fetch(`/api/verification/results/${id}`)
+          if (response.ok) {
+            return true
+          }
+          await new Promise((resolve) => setTimeout(resolve, 1000))
+        }
+        return false
+      }
+
+      await waitForResultReady(uploadResult.job_id)
+      window.location.href = `/verification/results/${uploadResult.job_id}`
     } catch (err) {
       console.error("Verification error:", err)
       setError(err instanceof Error ? err.message : "Failed to process certificate. Please try again.")

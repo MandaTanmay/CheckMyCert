@@ -1,7 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { jsPDF } from "jspdf"
 import QRCode from "qrcode"
-import { CertificateDB, type GeneratedCertificate } from "@/lib/certificate-db"
+import { proxyToDjango } from "@/lib/proxy"
 
 interface CertificateData {
   studentName: string
@@ -119,27 +119,26 @@ export async function POST(request: NextRequest) {
     // Generate PDF as buffer
     const pdfBuffer = pdf.output('arraybuffer')
 
-    // Store certificate data in database
-    const certificateRecord: GeneratedCertificate = {
-      id: certificateData.verificationToken,
-      verificationToken: certificateData.verificationToken,
-      studentName: certificateData.studentName,
-      course: certificateData.course,
-      institution: certificateData.institution,
-      graduationDate: certificateData.graduationDate,
-      grade: certificateData.grade,
-      certificateNumber: certificateData.certificateNumber,
-      issuedBy: certificateData.issuedBy,
-      additionalNotes: certificateData.additionalNotes,
-      createdBy: certificateData.createdBy,
-      createdAt: certificateData.timestamp,
-      isValid: true,
-      qrData: JSON.stringify(qrData),
-      checksum: qrData.checksum
+    // Persist generated certificate artifact in Django so no token state is kept in Next.js memory.
+    const uploadFormData = new FormData()
+    const fileName = `${certificateData.certificateNumber || certificateData.verificationToken}.pdf`
+    const pdfFile = new File([pdfBuffer], fileName, { type: "application/pdf" })
+    uploadFormData.append("file", pdfFile)
+    uploadFormData.append("ocr_language", "eng")
+    uploadFormData.append("translate_enabled", "false")
+
+    const persistResponse = await proxyToDjango(request, {
+      djangoPath: "/api/certificates/upload/",
+      method: "POST",
+      body: uploadFormData,
+      requireAuth: true,
+    })
+
+    if (!persistResponse.ok) {
+      return persistResponse
     }
 
-    // Store in database
-    CertificateDB.storeCertificate(certificateRecord)
+    const persistPayload = await persistResponse.json()
 
     // Return PDF as downloadable file
     const pdfBase64 = Buffer.from(pdfBuffer).toString('base64')
@@ -149,6 +148,8 @@ export async function POST(request: NextRequest) {
       success: true,
       downloadUrl,
       verificationToken: certificateData.verificationToken,
+      checksum: qrData.checksum,
+      job_id: persistPayload?.job_id,
       message: "Certificate generated successfully with invisible QR code"
     })
 

@@ -84,9 +84,6 @@ export default function BulkVerifyPage() {
       const response = await fetch("/api/bulk-verification", {
         method: "POST",
         body: formData,
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem("token")}`,
-        },
       })
 
       if (!response.ok) {
@@ -119,11 +116,7 @@ export default function BulkVerifyPage() {
   const pollJobProgress = async (jobId: string) => {
     const pollInterval = setInterval(async () => {
       try {
-        const response = await fetch(`/api/bulk-verification/${jobId}/status`, {
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem("token")}`,
-          },
-        })
+        const response = await fetch(`/api/bulk-verification/${jobId}/status`)
 
         if (!response.ok) {
           throw new Error("Failed to get job status")
@@ -166,11 +159,7 @@ export default function BulkVerifyPage() {
 
   const fetchJobResults = async (jobId: string) => {
     try {
-      const response = await fetch(`/api/bulk-verification/${jobId}/results`, {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem("token")}`,
-        },
-      })
+      const response = await fetch(`/api/bulk-verification/${jobId}/results`)
 
       if (response.ok) {
         const results = await response.json()
@@ -301,16 +290,16 @@ export default function BulkVerifyPage() {
               <CardContent className="space-y-4">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <label className="text-sm font-medium text-foreground">Priority Level</label>
-                    <select className="w-full mt-1 p-2 border border-input rounded-md bg-background">
+                    <label htmlFor="bulk-priority-level" className="text-sm font-medium text-foreground">Priority Level</label>
+                    <select id="bulk-priority-level" className="w-full mt-1 p-2 border border-input rounded-md bg-background">
                       <option>Standard (2-4 hours)</option>
                       <option>High (30-60 minutes)</option>
                       <option>Urgent (5-15 minutes)</option>
                     </select>
                   </div>
                   <div>
-                    <label className="text-sm font-medium text-foreground">Notification Method</label>
-                    <select className="w-full mt-1 p-2 border border-input rounded-md bg-background">
+                    <label htmlFor="bulk-notification-method" className="text-sm font-medium text-foreground">Notification Method</label>
+                    <select id="bulk-notification-method" className="w-full mt-1 p-2 border border-input rounded-md bg-background">
                       <option>Email + Dashboard</option>
                       <option>Dashboard Only</option>
                       <option>Email Only</option>

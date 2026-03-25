@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState, useEffect } from "react"
+import { useState } from "react"
 import { Eye, EyeOff, Shield, Mail, Lock, AlertCircle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -23,17 +23,8 @@ export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const { signIn, isFirebaseConfigured, user, userProfile } = useAuth()
+  const { signIn, isFirebaseConfigured } = useAuth()
   const router = useRouter()
-
-  // Redirect authenticated users
-  useEffect(() => {
-    if (user && !isLoading) {
-      // User is already logged in, redirect them to dashboard
-      const redirectPath = userProfile?.role === "admin" ? "/admin" : "/dashboard"
-      router.push(redirectPath)
-    }
-  }, [user, userProfile, router, isLoading])
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target
@@ -48,10 +39,9 @@ export default function LoginPage() {
 
     try {
       await signIn(formData.email, formData.password)
-      
-      // The useEffect will handle the redirect once the auth state is updated
-      // This ensures we don't redirect before the user state is properly set
-      
+
+      // Redirect only after an explicit successful sign-in action.
+      router.push("/dashboard")
     } catch (err: any) {
       const errorMessage =
         err.code === "auth/user-not-found" || err.code === "auth/wrong-password"

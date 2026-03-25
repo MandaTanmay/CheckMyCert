@@ -5,6 +5,7 @@ from rest_framework.parsers import MultiPartParser, FormParser
 from django.shortcuts import get_object_or_404
 from django.conf import settings
 from celery.result import AsyncResult
+import logging
 import uuid
 
 from .models import Certificate, VerificationResult, BulkVerificationJob
@@ -13,6 +14,8 @@ from .serializers import (
     VerificationResultSerializer, BulkVerificationJobSerializer
 )
 from .tasks import process_certificate_verification, process_bulk_verification
+
+logger = logging.getLogger(__name__)
 
 class CertificateUploadView(generics.CreateAPIView):
     serializer_class = CertificateUploadSerializer
@@ -23,13 +26,22 @@ class CertificateUploadView(generics.CreateAPIView):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         certificate = serializer.save()
+        response_message = 'Certificate uploaded successfully'
         
         # Start background processing
         if not settings.DEMO_MODE:
-            task = process_certificate_verification.delay(str(certificate.id))
-            certificate.celery_task_id = task.id
-            certificate.status = 'processing'
-            certificate.save()
+            try:
+                task = process_certificate_verification.delay(str(certificate.id))
+                certificate.celery_task_id = task.id
+                certificate.status = 'processing'
+                certificate.save()
+            except Exception as exc:
+                # Keep upload successful even when Redis/RabbitMQ is unavailable.
+                logger.warning("Unable to queue certificate verification task: %s", exc)
+                certificate.status = 'uploaded'
+                certificate.celery_task_id = None
+                certificate.save(update_fields=['status', 'celery_task_id'])
+                response_message = 'Certificate uploaded, but background processing queue is unavailable'
         else:
             # Demo mode - create mock result immediately
             from .utils import create_demo_result
@@ -38,7 +50,7 @@ class CertificateUploadView(generics.CreateAPIView):
         return Response({
             'job_id': str(certificate.id),
             'status': certificate.status,
-            'message': 'Certificate uploaded successfully'
+            'message': response_message
         }, status=status.HTTP_201_CREATED)
 
 class CertificateStatusView(generics.RetrieveAPIView):
@@ -70,10 +82,23 @@ class VerificationResultView(generics.RetrieveAPIView):
     
     def get_object(self):
         result_id = self.kwargs['result_id']
+        result = VerificationResult.objects.filter(id=result_id).first()
+        if result and result.certificate.user_id == self.request.user.id:
+            return result
+
+        # Fallback: allow callers that pass a certificate/job id instead of a result id.
+        result = VerificationResult.objects.filter(
+            certificate_id=result_id,
+            certificate__user=self.request.user,
+        ).first()
+
+        if result:
+            return result
+
         return get_object_or_404(
             VerificationResult,
             id=result_id,
-            certificate__user=self.request.user
+            certificate__user=self.request.user,
         )
 
 class BulkVerificationView(generics.CreateAPIView):
@@ -92,18 +117,26 @@ class BulkVerificationView(generics.CreateAPIView):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         bulk_job = serializer.save(user=request.user)
+        response_message = 'Bulk verification job created successfully'
         
         # Start background processing
         if not settings.DEMO_MODE:
-            task = process_bulk_verification.delay(str(bulk_job.id))
-            bulk_job.celery_task_id = task.id
-            bulk_job.status = 'processing'
-            bulk_job.save()
+            try:
+                task = process_bulk_verification.delay(str(bulk_job.id))
+                bulk_job.celery_task_id = task.id
+                bulk_job.status = 'processing'
+                bulk_job.save()
+            except Exception as exc:
+                logger.warning("Unable to queue bulk verification task: %s", exc)
+                bulk_job.status = 'pending'
+                bulk_job.celery_task_id = None
+                bulk_job.save(update_fields=['status', 'celery_task_id'])
+                response_message = 'Bulk job created, but background processing queue is unavailable'
         
         return Response({
             'batch_id': str(bulk_job.id),
             'status': bulk_job.status,
-            'message': 'Bulk verification job created successfully'
+            'message': response_message
         }, status=status.HTTP_201_CREATED)
 
 class BulkVerificationStatusView(generics.RetrieveAPIView):
@@ -116,6 +149,28 @@ class BulkVerificationStatusView(generics.RetrieveAPIView):
             BulkVerificationJob,
             id=batch_id,
             user=self.request.user
+        )
+
+
+class BulkVerificationResultsView(generics.RetrieveAPIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, batch_id):
+        bulk_job = get_object_or_404(BulkVerificationJob, id=batch_id, user=request.user)
+
+        return Response(
+            {
+                'batch_id': str(bulk_job.id),
+                'status': bulk_job.status,
+                'summary': {
+                    'total': bulk_job.total_certificates,
+                    'processed': bulk_job.processed_certificates,
+                    'successful': bulk_job.successful_verifications,
+                    'failed': bulk_job.failed_verifications,
+                },
+                'results': [],
+                'output_file': bulk_job.output_file.url if bulk_job.output_file else None,
+            }
         )
 
 class UserCertificatesView(generics.ListAPIView):
@@ -163,3 +218,35 @@ def dashboard_stats(request):
             2
         )
     })
+
+
+@api_view(['POST', 'GET'])
+@permission_classes([permissions.AllowAny])
+def verify_certificate_token(request):
+    token = request.data.get('verificationToken') if request.method == 'POST' else request.query_params.get('token')
+
+    if not token:
+        return Response({'error': 'Verification token is required'}, status=status.HTTP_400_BAD_REQUEST)
+
+    result = VerificationResult.objects.filter(qr_token=token).select_related('certificate').first()
+    if not result:
+        return Response({'verified': False, 'status': 'INVALID', 'error': 'Certificate not found'}, status=status.HTTP_404_NOT_FOUND)
+
+    cert = result.certificate
+    return Response(
+        {
+            'verified': result.status == 'valid',
+            'status': result.status.upper(),
+            'certificate': {
+                'certificateId': str(cert.id),
+                'filename': cert.original_filename,
+                'uploadedAt': cert.uploaded_at,
+            },
+            'verificationDetails': {
+                'verifiedAt': result.created_at,
+                'confidence': result.overall_confidence,
+                'databaseMatch': result.database_match,
+                'signatureValid': result.signature_valid,
+            },
+        }
+    )
