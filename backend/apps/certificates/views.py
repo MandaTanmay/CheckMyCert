@@ -57,10 +57,90 @@ class CertificateUploadView(generics.CreateAPIView):
         }, status=status.HTTP_201_CREATED)
 
     def _ensure_fallback_result(self, certificate):
-        """Create a minimal result so results page can load without Celery workers."""
+        """Create a synchronous fallback result so results page can load without Celery workers."""
         existing = VerificationResult.objects.filter(certificate=certificate).first()
         if existing:
             return existing
+
+        extracted_text = ''
+        extracted_fields = {}
+        word_coordinates = []
+        ocr_confidence = 0
+        database_match = False
+        matched_institution = None
+        matched_record = None
+        database_confidence = 0
+        fallback_issues = [
+            {
+                'type': 'processing_unavailable',
+                'severity': 'medium',
+                'description': 'Background workers are unavailable. Showing synchronous fallback extraction.',
+                'coordinates': {'x': 0, 'y': 0, 'width': 0, 'height': 0},
+            }
+        ]
+
+        # Attempt OCR synchronously so users still get extracted values.
+        try:
+            from .ocr_processor import OCRProcessor
+
+            ocr_output = OCRProcessor().process_certificate(
+                certificate.file.path,
+                language=certificate.ocr_language,
+                translate=certificate.translate_enabled,
+            )
+
+            extracted_text = ocr_output.get('raw_text', '') or ''
+            extracted_fields = ocr_output.get('extracted_fields', {}) or {}
+            word_coordinates = ocr_output.get('word_coordinates', []) or []
+            ocr_confidence = float(ocr_output.get('confidence', 0) or 0)
+
+            if ocr_output.get('error'):
+                fallback_issues.append(
+                    {
+                        'type': 'ocr_error',
+                        'severity': 'high',
+                        'description': str(ocr_output.get('error')),
+                        'coordinates': {'x': 0, 'y': 0, 'width': 0, 'height': 0},
+                    }
+                )
+        except Exception as exc:
+            logger.warning("Fallback OCR extraction failed: %s", exc)
+            fallback_issues.append(
+                {
+                    'type': 'ocr_unavailable',
+                    'severity': 'high',
+                    'description': f'Synchronous OCR failed: {exc}',
+                    'coordinates': {'x': 0, 'y': 0, 'width': 0, 'height': 0},
+                }
+            )
+
+        if word_coordinates:
+            extracted_fields['_word_coordinates'] = word_coordinates
+
+        # Run database matching synchronously in fallback mode as well.
+        try:
+            from .database_matcher import DatabaseMatcher
+
+            db_result = DatabaseMatcher().find_matches(extracted_fields)
+            database_match = bool(db_result.get('match_found', False))
+            matched_institution = db_result.get('institution')
+            matched_record = db_result.get('record')
+            database_confidence = float(db_result.get('confidence', 0) or 0)
+        except Exception as exc:
+            logger.warning("Fallback database matching failed: %s", exc)
+            fallback_issues.append(
+                {
+                    'type': 'database_match_unavailable',
+                    'severity': 'medium',
+                    'description': f'Synchronous database matching failed: {exc}',
+                    'coordinates': {'x': 0, 'y': 0, 'width': 0, 'height': 0},
+                }
+            )
+
+        # Calculate overall status and confidence based on results
+        overall_status, overall_confidence = self._calculate_fallback_result(
+            ocr_confidence, database_match, database_confidence
+        )
 
         fallback_hash = hashlib.sha256(
             f"fallback:{certificate.id}:{certificate.user_id}:{timezone.now().isoformat()}".encode()
@@ -68,26 +148,48 @@ class CertificateUploadView(generics.CreateAPIView):
 
         return VerificationResult.objects.create(
             certificate=certificate,
-            status='unverified',
-            overall_confidence=0,
-            extracted_text='',
-            extracted_fields={},
-            ocr_confidence=0,
+            status=overall_status,
+            overall_confidence=overall_confidence,
+            extracted_text=extracted_text,
+            extracted_fields=extracted_fields,
+            ocr_confidence=ocr_confidence,
             tamper_detected=False,
             tamper_confidence=0,
-            tamper_issues=[
-                {
-                    'type': 'processing_unavailable',
-                    'severity': 'medium',
-                    'description': 'Automatic verification is unavailable because background workers are not running.',
-                }
-            ],
-            database_match=False,
+            tamper_issues=fallback_issues,
+            database_match=database_match,
+            matched_institution=matched_institution,
+            matched_record=matched_record,
             signature_valid=False,
             signature_details={'reason': 'background_workers_unavailable'},
             qr_token=f"qr_{uuid.uuid4().hex}",
             verification_hash=fallback_hash,
         )
+
+    def _calculate_fallback_result(self, ocr_confidence, database_match, database_confidence):
+        """Calculate overall status and confidence for fallback verification"""
+        # Weight scores: OCR (20%), Database Match (80% for verification)
+        confidence_scores = []
+
+        # OCR confidence (weight: 0.2)
+        confidence_scores.append(ocr_confidence * 0.2)
+
+        # Database match (weight: 0.8)
+        if database_match:
+            confidence_scores.append(database_confidence * 0.8)
+        else:
+            confidence_scores.append(0)
+
+        overall_confidence = sum(confidence_scores)
+
+        # Determine status
+        if database_match and database_confidence >= 80:
+            status = 'valid'
+        elif overall_confidence >= 60:
+            status = 'valid'
+        else:
+            status = 'unverified'
+
+        return status, round(min(overall_confidence, 100), 2)
 
 class CertificateStatusView(generics.RetrieveAPIView):
     permission_classes = [permissions.IsAuthenticated]
