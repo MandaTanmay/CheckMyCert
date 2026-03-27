@@ -3,6 +3,7 @@ from . import views
 
 urlpatterns = [
     path('upload/', views.CertificateUploadView.as_view(), name='certificate-upload'),
+    path('generated-record/', views.store_generated_certificate_record, name='generated-certificate-record'),
     path('verify/', views.verify_certificate_token, name='certificate-verify-token'),
     path('status/<uuid:job_id>/', views.CertificateStatusView.as_view(), name='certificate-status'),
     path('result/<uuid:result_id>/', views.VerificationResultView.as_view(), name='verification-result'),

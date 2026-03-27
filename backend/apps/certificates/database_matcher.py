@@ -20,8 +20,13 @@ class DatabaseMatcher:
             degree = self.extract_field_value(extracted_fields, 'degree')
             institution_name = self.extract_field_value(extracted_fields, 'institution')
             graduation_date = self.extract_field_value(extracted_fields, 'graduation_date')
+            certificate_number = self.extract_field_value(extracted_fields, 'certificate_number')
+            registration_number = self.extract_field_value(extracted_fields, 'registration_number')
+            roll_number = self.extract_field_value(extracted_fields, 'roll_number')
+
+            identifier = certificate_number or registration_number
             
-            if not student_name:
+            if not student_name and not identifier and not roll_number:
                 return {
                     'match_found': False,
                     'confidence': 0,
@@ -44,13 +49,16 @@ class DatabaseMatcher:
             
             for institution in institutions:
                 matches = self.search_institution_records(
-                    institution, student_name, degree, graduation_date
+                    institution,
+                    student_name,
+                    degree,
+                    graduation_date,
+                    identifier,
+                    roll_number,
                 )
                 
                 for match in matches:
-                    confidence = self.calculate_match_confidence(
-                        extracted_fields, match['record']
-                    )
+                    confidence = self.calculate_match_confidence(extracted_fields, match['record'])
                     
                     if confidence > best_confidence:
                         best_confidence = confidence
@@ -111,17 +119,26 @@ class DatabaseMatcher:
         if exact_matches.exists():
             return exact_matches
         
-        # Fuzzy matching for partial matches
+        # Fuzzy matching for partial matches / OCR variants.
         all_institutions = Institution.objects.all()
         fuzzy_matches = []
         
         for institution in all_institutions:
-            similarity = difflib.SequenceMatcher(
-                None, clean_name.lower(), institution.name.lower()
-            ).ratio()
-            
-            if similarity >= self.similarity_threshold:
-                fuzzy_matches.append((institution, similarity))
+            inst_name = self.clean_institution_name(institution.name or '').lower()
+            seq_similarity = difflib.SequenceMatcher(None, clean_name.lower(), inst_name).ratio()
+
+            clean_tokens = set(clean_name.lower().split())
+            inst_tokens = set(inst_name.split())
+            overlap = (len(clean_tokens & inst_tokens) / len(clean_tokens | inst_tokens)) if (clean_tokens and inst_tokens) else 0
+
+            contains_bonus = 0
+            if clean_name.lower() in inst_name or inst_name in clean_name.lower():
+                contains_bonus = 0.2
+
+            score = max(seq_similarity, overlap + contains_bonus)
+
+            if score >= 0.6:
+                fuzzy_matches.append((institution, score))
         
         # Sort by similarity and return top matches
         fuzzy_matches.sort(key=lambda x: x[1], reverse=True)
@@ -132,17 +149,33 @@ class DatabaseMatcher:
         Clean and normalize institution name for matching
         """
         # Remove common suffixes and prefixes
-        name = re.sub(r'\b(university|college|institute|school)\b', '', name, flags=re.IGNORECASE)
-        name = re.sub(r'\b(the|of)\b', '', name, flags=re.IGNORECASE)
+        name = re.sub(r'\b(the|of|and)\b', '', name, flags=re.IGNORECASE)
         name = re.sub(r'[^\w\s]', '', name)  # Remove punctuation
         name = ' '.join(name.split())  # Normalize whitespace
         return name.strip()
     
-    def search_institution_records(self, institution, student_name, degree, graduation_date):
+    def search_institution_records(self, institution, student_name, degree, graduation_date, identifier=None, roll_number=None):
         """
         Search for student records in a specific institution
         """
+        return self._search_institution_records(
+            institution,
+            student_name,
+            degree,
+            graduation_date,
+            identifier=identifier,
+            roll_number=roll_number,
+        )
+
+    def _search_institution_records(self, institution, student_name, degree, graduation_date, identifier, roll_number):
+        """Search for records with optional strong identifier matching."""
         query = Q(institution=institution)
+
+        # Identifier-first narrowing gives deterministic matches when available.
+        if identifier:
+            query &= Q(certificate_number__iexact=identifier)
+        elif roll_number:
+            query &= Q(student_id__iexact=roll_number)
         
         # Add student name filter
         if student_name:
@@ -166,6 +199,30 @@ class DatabaseMatcher:
                 query &= Q(graduation_date=parsed_date)
         
         records = InstitutionDatabase.objects.filter(query)
+
+        # If identifier-constrained query returned nothing, fall back to fuzzy query path.
+        if not records.exists() and (identifier or roll_number):
+            query = Q(institution=institution)
+
+            if student_name:
+                name_parts = student_name.split()
+                for part in name_parts:
+                    if len(part) > 2:
+                        query &= Q(student_name__icontains=part)
+
+            if degree:
+                query &= Q(
+                    Q(certificate_type__icontains=degree) |
+                    Q(degree_program__icontains=degree) |
+                    Q(major__icontains=degree)
+                )
+
+            if graduation_date:
+                parsed_date = self.parse_graduation_date(graduation_date)
+                if parsed_date:
+                    query &= Q(graduation_date=parsed_date)
+
+            records = InstitutionDatabase.objects.filter(query)
         
         return [{'record': record} for record in records]
     
@@ -184,6 +241,18 @@ class DatabaseMatcher:
             # Format: "06/15/2023"
             if re.match(r'\d{1,2}/\d{1,2}/\d{4}', date_string):
                 return datetime.datetime.strptime(date_string, '%m/%d/%Y').date()
+
+            # Format: "06-15-2023"
+            if re.match(r'\d{1,2}-\d{1,2}-\d{4}', date_string):
+                return datetime.datetime.strptime(date_string, '%m-%d-%Y').date()
+
+            # Format: "06.08.2021" (common OCR output)
+            if re.match(r'\d{1,2}\.\d{1,2}\.\d{4}', date_string):
+                return datetime.datetime.strptime(date_string, '%d.%m.%Y').date()
+
+            # Format: "2021-08-06"
+            if re.match(r'\d{4}-\d{1,2}-\d{1,2}', date_string):
+                return datetime.datetime.strptime(date_string, '%Y-%m-%d').date()
             
             # Format: "2023"
             if re.match(r'^\d{4}$', date_string):
@@ -199,6 +268,21 @@ class DatabaseMatcher:
         Calculate confidence score for a potential match
         """
         confidence_scores = []
+
+        # Strong identifier checks first.
+        extracted_cert = (
+            self.extract_field_value(extracted_fields, 'certificate_number')
+            or self.extract_field_value(extracted_fields, 'registration_number')
+        )
+        extracted_roll = self.extract_field_value(extracted_fields, 'roll_number')
+
+        if extracted_cert and db_record.certificate_number:
+            if extracted_cert.strip().lower() == db_record.certificate_number.strip().lower():
+                confidence_scores.append(40)
+
+        if extracted_roll and db_record.student_id:
+            if extracted_roll.strip().lower() == db_record.student_id.strip().lower():
+                confidence_scores.append(30)
         
         # Compare student name
         extracted_name = self.extract_field_value(extracted_fields, 'student_name')
@@ -238,6 +322,6 @@ class DatabaseMatcher:
         
         # Calculate overall confidence
         if confidence_scores:
-            return sum(confidence_scores)
+            return min(100, sum(confidence_scores))
         else:
             return 0

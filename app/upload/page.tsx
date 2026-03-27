@@ -11,8 +11,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import RoleBasedNavigation from "@/components/role-based-nav"
-import { useUser } from "@/components/role-guard"
+import Link from "next/link"
 
 interface UploadedFile {
   file: File
@@ -25,6 +24,13 @@ interface ProcessingStep {
   status: "pending" | "processing" | "completed" | "error"
   progress: number
   message?: string
+}
+
+const OCR_TO_TRANSLATE_LANGUAGE: Record<string, string> = {
+  eng: "english",
+  spa: "spanish",
+  fre: "french",
+  ger: "german",
 }
 
 const extractErrorMessage = (payload: unknown): string | null => {
@@ -52,7 +58,6 @@ const extractErrorMessage = (payload: unknown): string | null => {
 }
 
 export default function UploadPage() {
-  const { user } = useUser()
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([])
   const [selectedLanguage, setSelectedLanguage] = useState("eng")
   const [translateTo, setTranslateTo] = useState("english")
@@ -133,7 +138,9 @@ export default function UploadPage() {
 
       // Add processing options
       formData.append("ocr_language", selectedLanguage)
-      formData.append("translate_enabled", translateTo !== selectedLanguage ? "true" : "false")
+      const detectedLanguageName = OCR_TO_TRANSLATE_LANGUAGE[selectedLanguage]
+      const shouldTranslate = detectedLanguageName ? translateTo !== detectedLanguageName : true
+      formData.append("translate_enabled", shouldTranslate ? "true" : "false")
       formData.append("translate_to", translateTo)
       formData.append("ocr_enabled", ocrEnabled.toString())
       formData.append("tamper_detection", tamperDetection.toString())
@@ -263,7 +270,19 @@ export default function UploadPage() {
 
   return (
     <div className="min-h-screen bg-background">
-      <RoleBasedNavigation />
+      <header className="border-b border-border bg-card/50 backdrop-blur-sm">
+        <div className="container mx-auto px-4 py-4 flex items-center justify-between">
+          <Link href="/" className="flex items-center gap-2">
+            <Shield className="h-8 w-8 text-primary" />
+            <span className="text-2xl font-bold text-foreground">CheckMyCert</span>
+          </Link>
+          <nav className="flex items-center gap-4">
+            <Link href="/dashboard" className="text-muted-foreground hover:text-foreground transition-colors">
+              Dashboard
+            </Link>
+          </nav>
+        </div>
+      </header>
 
       <div className="container mx-auto px-4 py-8 max-w-4xl">
         <div className="text-center mb-8">

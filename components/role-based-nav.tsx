@@ -1,22 +1,21 @@
 "use client"
 
+import { useState } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { Shield, Upload, BarChart3, Users, Settings, QrCode, FileStack, LogOut, FileText } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
 import { useAuth } from "@/contexts/auth-context"
 
 export default function RoleBasedNavigation() {
   const pathname = usePathname()
   const { user, userProfile, logout } = useAuth()
+  const [showUserMenu, setShowUserMenu] = useState(false)
+
+  const isAuthenticated = Boolean(user || userProfile)
+  const displayName = userProfile?.displayName || user?.displayName || user?.email || "Account"
+  const roleLabel = userProfile?.role ? userProfile.role.toUpperCase() : "USER"
 
   const handleLogout = async () => {
     try {
@@ -90,47 +89,36 @@ export default function RoleBasedNavigation() {
         </nav>
 
         <div className="flex items-center gap-4">
-          {userProfile ? (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" className="flex items-center gap-2">
-                  <div className="text-right">
-                    <p className="text-sm font-medium">{userProfile.displayName}</p>
-                    <Badge variant="secondary" className="text-xs">
-                      {userProfile.role.toUpperCase()}
-                    </Badge>
-                  </div>
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-56">
-                <DropdownMenuItem asChild>
-                  <Link href="/dashboard" className="flex items-center gap-2">
-                    <BarChart3 className="h-4 w-4" />
-                    Dashboard
-                  </Link>
-                </DropdownMenuItem>
-                <DropdownMenuItem asChild>
-                  <Link href="/settings" className="flex items-center gap-2">
-                    <Settings className="h-4 w-4" />
-                    Settings
-                  </Link>
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={handleLogout} className="text-destructive">
-                  <LogOut className="h-4 w-4 mr-2" />
-                  Logout
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          ) : (
-            <div className="flex items-center gap-2">
-              <Button variant="ghost" asChild>
-                <Link href="/login">Login</Link>
+          {isAuthenticated ? (
+            <div
+              className="relative"
+              onMouseEnter={() => setShowUserMenu(true)}
+              onMouseLeave={() => setShowUserMenu(false)}
+            >
+              <Button variant="ghost" className="flex items-center gap-2">
+                <div className="text-right">
+                  <p className="text-sm font-medium">{displayName}</p>
+                  <Badge variant="secondary" className="text-xs">
+                    {roleLabel}
+                  </Badge>
+                </div>
               </Button>
-              <Button asChild>
-                <Link href="/register">Register</Link>
-              </Button>
+
+              {showUserMenu && (
+                <div className="absolute right-0 mt-2 w-44 rounded-md border border-border bg-popover p-2 shadow-md z-50">
+                  <button
+                    type="button"
+                    onClick={handleLogout}
+                    className="flex w-full items-center gap-2 rounded-sm px-2 py-2 text-sm text-destructive hover:bg-accent"
+                  >
+                    <LogOut className="h-4 w-4" />
+                    Logout
+                  </button>
+                </div>
+              )}
             </div>
+          ) : (
+            <div className="hidden" aria-hidden="true" />
           )}
         </div>
       </div>

@@ -214,9 +214,6 @@ export default function QRVerifyPage() {
             <span className="text-2xl font-bold text-foreground">CheckMyCert</span>
           </Link>
           <nav className="flex items-center gap-4">
-            <Link href="/upload" className="text-muted-foreground hover:text-foreground transition-colors">
-              Upload Certificate
-            </Link>
             <Link href="/dashboard" className="text-muted-foreground hover:text-foreground transition-colors">
               Dashboard
             </Link>

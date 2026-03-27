@@ -9,8 +9,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
 import { FileText, Download, QrCode, Shield, Loader2 } from "lucide-react"
-import RoleBasedNavigation from "@/components/role-based-nav"
 import { useUser } from "@/components/role-guard"
+import Link from "next/link"
 
 interface CertificateData {
   studentName: string
@@ -50,8 +50,9 @@ export default function GeneratePage() {
     setIsGenerating(true)
     
     try {
-      // Generate unique verification token
-      const token = `cert_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+      // Prefer certificate number as QR token so generated data maps to persisted records.
+      const rawCertNumber = certificateData.certificateNumber.trim()
+      const token = rawCertNumber || `cert_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
       
       const response = await fetch("/api/certificates/generate", {
         method: "POST",
@@ -92,7 +93,19 @@ export default function GeneratePage() {
 
   return (
     <div className="min-h-screen bg-background">
-      <RoleBasedNavigation />
+      <header className="border-b border-border bg-card/50 backdrop-blur-sm">
+        <div className="container mx-auto px-4 py-4 flex items-center justify-between">
+          <Link href="/" className="flex items-center gap-2">
+            <Shield className="h-8 w-8 text-primary" />
+            <span className="text-2xl font-bold text-foreground">CheckMyCert</span>
+          </Link>
+          <nav className="flex items-center gap-4">
+            <Link href="/dashboard" className="text-muted-foreground hover:text-foreground transition-colors">
+              Dashboard
+            </Link>
+          </nav>
+        </div>
+      </header>
 
       <div className="container mx-auto px-4 py-8 max-w-4xl">
         <div className="text-center mb-8">

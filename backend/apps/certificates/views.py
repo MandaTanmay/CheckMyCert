@@ -6,11 +6,13 @@ from django.shortcuts import get_object_or_404
 from django.conf import settings
 from django.utils import timezone
 from celery.result import AsyncResult
+from datetime import datetime
 import logging
 import uuid
 import hashlib
 
 from .models import Certificate, VerificationResult, BulkVerificationJob
+from apps.institutions.models import Institution, InstitutionDatabase
 from .serializers import (
     CertificateUploadSerializer, CertificateSerializer,
     VerificationResultSerializer, BulkVerificationJobSerializer
@@ -65,6 +67,7 @@ class CertificateUploadView(generics.CreateAPIView):
         extracted_text = ''
         extracted_fields = {}
         word_coordinates = []
+        line_coordinates = []
         ocr_confidence = 0
         database_match = False
         matched_institution = None
@@ -92,6 +95,7 @@ class CertificateUploadView(generics.CreateAPIView):
             extracted_text = ocr_output.get('raw_text', '') or ''
             extracted_fields = ocr_output.get('extracted_fields', {}) or {}
             word_coordinates = ocr_output.get('word_coordinates', []) or []
+            line_coordinates = ocr_output.get('line_coordinates', []) or []
             ocr_confidence = float(ocr_output.get('confidence', 0) or 0)
 
             if ocr_output.get('error'):
@@ -116,6 +120,8 @@ class CertificateUploadView(generics.CreateAPIView):
 
         if word_coordinates:
             extracted_fields['_word_coordinates'] = word_coordinates
+        if line_coordinates:
+            extracted_fields['_line_coordinates'] = line_coordinates
 
         # Run database matching synchronously in fallback mode as well.
         try:
@@ -325,7 +331,91 @@ class UserVerificationResultsView(generics.ListAPIView):
     def get_queryset(self):
         return VerificationResult.objects.filter(
             certificate__user=self.request.user
+        ).select_related('certificate', 'matched_institution', 'matched_record').order_by('-created_at')
+
+
+def _parse_generated_date(value):
+    if not value:
+        return None
+
+    date_str = str(value).strip()
+    if not date_str:
+        return None
+
+    for fmt in ('%Y-%m-%d', '%d-%m-%Y', '%d/%m/%Y', '%Y/%m/%d'):
+        try:
+            return datetime.strptime(date_str, fmt).date()
+        except ValueError:
+            continue
+
+    return None
+
+
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def store_generated_certificate_record(request):
+    """Persist generated certificate form data into institutional records."""
+    payload = request.data or {}
+
+    student_name = str(payload.get('student_name') or payload.get('studentName') or '').strip()
+    degree = str(payload.get('degree') or payload.get('course') or '').strip()
+    institution_name = str(payload.get('institution') or payload.get('institution_name') or '').strip()
+    certificate_number = str(payload.get('certificate_number') or payload.get('certificateNumber') or '').strip()
+
+    if not all([student_name, degree, institution_name, certificate_number]):
+        return Response(
+            {
+                'error': 'student_name, degree, institution, and certificate_number are required',
+            },
+            status=status.HTTP_400_BAD_REQUEST,
         )
+
+    graduation_date = _parse_generated_date(payload.get('graduation_date') or payload.get('graduationDate'))
+    issued_date = graduation_date or timezone.now().date()
+
+    institution, _ = Institution.objects.get_or_create(
+        name=institution_name,
+        defaults={
+            'institution_type': 'college',
+            'country': 'Unknown',
+            'city': 'Unknown',
+            'is_verified': True,
+        },
+    )
+
+    record_defaults = {
+        'institution': institution,
+        'student_name': student_name,
+        'student_id': str(payload.get('created_by') or request.user.id),
+        'certificate_type': degree,
+        'degree_program': degree,
+        'major': str(payload.get('major') or '').strip() or None,
+        'gpa': str(payload.get('grade') or '').strip() or None,
+        'graduation_date': graduation_date,
+        'certificate_issued_date': issued_date,
+        'additional_data': {
+            'issued_by': payload.get('issued_by') or payload.get('issuedBy') or '',
+            'additional_notes': payload.get('additional_notes') or payload.get('additionalNotes') or '',
+            'created_by_user_id': str(request.user.id),
+            'created_by_email': getattr(request.user, 'email', ''),
+        },
+    }
+
+    record, created = InstitutionDatabase.objects.update_or_create(
+        certificate_number=certificate_number,
+        defaults=record_defaults,
+    )
+
+    return Response(
+        {
+            'success': True,
+            'created': created,
+            'record_id': record.id,
+            'institution_id': str(institution.id),
+            'certificate_number': record.certificate_number,
+        },
+        status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
+    )
 
 @api_view(['GET'])
 @permission_classes([permissions.IsAuthenticated])

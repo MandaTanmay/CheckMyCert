@@ -4,6 +4,7 @@ from rest_framework.views import APIView
 
 from apps.certificates.models import Certificate, VerificationResult
 from apps.certificates.tasks import process_certificate_verification
+from apps.institutions.models import InstitutionDatabase
 
 from .serializers import DatabaseVerifyRequestSerializer, TokenVerificationRequestSerializer
 from .services.pipeline import VerificationPipeline
@@ -97,7 +98,31 @@ class PublicQRVerifyView(APIView):
         result = VerificationResult.objects.filter(qr_token=token).select_related('certificate', 'matched_institution').first()
 
         if not result:
-            return Response({'error': 'Invalid QR token'}, status=status.HTTP_404_NOT_FOUND)
+            db_record = InstitutionDatabase.objects.filter(certificate_number=token).select_related('institution').first()
+
+            if not db_record:
+                return Response({'error': 'Invalid QR token'}, status=status.HTTP_404_NOT_FOUND)
+
+            return Response(
+                {
+                    'status': 'valid',
+                    'certificate_data': {
+                        'certificate_id': None,
+                        'filename': f"generated_{db_record.certificate_number}.pdf",
+                        'institution': db_record.institution.name,
+                        'student_name': db_record.student_name,
+                        'degree': db_record.certificate_type,
+                        'graduation_date': db_record.graduation_date,
+                    },
+                    'public_info': {
+                        'institution_verified': True,
+                        'digital_signature': False,
+                        'tamper_detected': bool(db_record.is_revoked),
+                    },
+                    'verification_date': None,
+                    'qr_token': token,
+                }
+            )
 
         cert = result.certificate
         institution_name = result.matched_institution.name if result.matched_institution else None

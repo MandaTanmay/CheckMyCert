@@ -211,6 +211,9 @@ DATA_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024  # 10MB
 # Demo Mode
 DEMO_MODE = config('DEMO_MODE', default=False, cast=bool)
 
+# OCR fallback configuration
+OCR_SPACE_API_KEY = config('OCR_SPACE_API_KEY', default='')
+
 # Verification scoring configuration
 CONFIDENCE_WEIGHT_OCR = config('CONFIDENCE_WEIGHT_OCR', default=0.2, cast=float)
 CONFIDENCE_WEIGHT_TAMPER = config('CONFIDENCE_WEIGHT_TAMPER', default=0.4, cast=float)
