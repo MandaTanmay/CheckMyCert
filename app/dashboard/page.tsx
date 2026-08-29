@@ -53,6 +53,26 @@ interface RecentVerification {
   uploadedAt: string
 }
 
+interface DashboardStatsResponse {
+  total_certificates?: number
+  valid_certificates?: number
+  tampered_certificates?: number
+  completed_verifications?: number
+  success_rate?: number
+}
+
+interface VerificationApiItem {
+  id?: string
+  status?: string
+  overall_confidence?: number
+  created_at?: string
+  certificate?: {
+    original_filename?: string
+    status?: string
+    uploaded_at?: string
+  }
+}
+
 export default function DashboardPage() {
   const { user, loading: userLoading } = useUser()
 
@@ -80,86 +100,89 @@ export default function DashboardPage() {
   const [dataLoading, setDataLoading] = useState(true)
 
   useEffect(() => {
-    if (user) {
+    if (user?.id) {
       // Load data asynchronously without blocking the UI
       fetchDashboardData()
     }
-  }, [user])
+  }, [user?.id, user?.role])
 
   const fetchDashboardData = async () => {
     try {
-      // Load mock data immediately (no artificial delays)
-      loadMockData()
+      const [statsResponse, recentResponse] = await Promise.all([
+        fetch("/api/dashboard/stats", { cache: "no-store" }),
+        fetch("/api/dashboard/recent-verifications?page=1", { cache: "no-store" }),
+      ])
+
+      if (statsResponse.ok) {
+        const statsData = (await statsResponse.json()) as DashboardStatsResponse
+        const totalCertificates = Number(statsData.total_certificates ?? 0)
+        const validCertificates = Number(statsData.valid_certificates ?? 0)
+        const tamperedCertificates = Number(statsData.tampered_certificates ?? 0)
+        const completedVerifications = Number(statsData.completed_verifications ?? 0)
+        const pendingVerifications = Math.max(totalCertificates - completedVerifications, 0)
+        const successRate = Number(statsData.success_rate ?? 0)
+
+        setStats({
+          totalCertificates,
+          validCertificates,
+          tamperedCertificates,
+          pendingVerifications,
+          successRate,
+        })
+
+        // Keep admin cards functional with available real values.
+        setAdminStats((prev) => ({
+          ...prev,
+          totalCertificates,
+          validCertificates,
+          tamperedCertificates,
+          pendingVerifications,
+          successRate,
+          dailyVerifications: completedVerifications,
+        }))
+      }
+
+      if (recentResponse.ok) {
+        const recentPayload = await recentResponse.json()
+        const rawItems: VerificationApiItem[] = Array.isArray(recentPayload)
+          ? recentPayload
+          : Array.isArray(recentPayload?.results)
+            ? recentPayload.results
+            : []
+
+        const mapped = rawItems
+          .map((item): RecentVerification | null => {
+            const rawStatus = String(item?.status || item?.certificate?.status || "unverified").toLowerCase()
+            const status: RecentVerification["status"] =
+              rawStatus === "valid" || rawStatus === "tampered" || rawStatus === "unverified" || rawStatus === "processing"
+                ? rawStatus
+                : "unverified"
+
+            const id = String(item?.id || "")
+            if (!id) return null
+
+            return {
+              id,
+              filename: item?.certificate?.original_filename || "certificate",
+              status,
+              confidence: Number(item?.overall_confidence ?? 0),
+              uploadedAt: item?.created_at || item?.certificate?.uploaded_at || new Date().toISOString(),
+            }
+          })
+          .filter((item): item is RecentVerification => Boolean(item))
+
+        setRecentVerifications(mapped)
+      } else {
+        setRecentVerifications([])
+      }
+
       setDataLoading(false)
     } catch (error) {
       console.error("Failed to fetch dashboard data:", error)
-      loadMockData()
+      setRecentVerifications([])
       setDataLoading(false)
     }
   }
-
-  const loadMockData = () => {
-    if (user?.role === "admin") {
-      setAdminStats({
-        totalCertificates: 2847,
-        validCertificates: 2542,
-        tamperedCertificates: 203,
-        pendingVerifications: 102,
-        successRate: 89.3,
-        totalUsers: 1234,
-        totalInstitutions: 89,
-        systemHealth: 98.5,
-        dailyVerifications: 456,
-      })
-    } else {
-      setStats({
-        totalCertificates: 47,
-        validCertificates: 42,
-        tamperedCertificates: 3,
-        pendingVerifications: 2,
-        successRate: 89.4,
-      })
-    }
-    setRecentVerifications(getMockVerifications())
-  }
-
-  const getMockVerifications = (): RecentVerification[] => [
-    {
-      id: "1",
-      filename: "stanford_diploma.pdf",
-      status: "valid",
-      confidence: 94.5,
-      uploadedAt: "2024-01-15T10:30:00Z",
-    },
-    {
-      id: "2",
-      filename: "mit_certificate.jpg",
-      status: "processing",
-      confidence: 0,
-      uploadedAt: "2024-01-15T09:15:00Z",
-    },
-    {
-      id: "3",
-      filename: "harvard_degree.pdf",
-      status: "tampered",
-      confidence: 23.1,
-      uploadedAt: "2024-01-14T16:45:00Z",
-    },
-    {
-      id: "4",
-      filename: "berkeley_transcript.pdf",
-      status: "valid",
-      confidence: 97.8,
-      uploadedAt: "2024-01-14T14:20:00Z",
-    },
-    {
-      id: "5",
-      filename: "caltech_diploma.jpg",
-      status: "unverified",
-      confidence: 67.2,
-      uploadedAt: "2024-01-13T11:10:00Z",
-    },
-  ]
 
   const getStatusIcon = (status: string) => {
     switch (status) {
@@ -478,7 +501,7 @@ export default function DashboardPage() {
                           </div>
                         </div>
                       ))
-                    ) : (
+                    ) : recentVerifications.length > 0 ? (
                       recentVerifications.map((verification) => (
                       <div
                         key={verification.id}
@@ -520,6 +543,10 @@ export default function DashboardPage() {
                         </div>
                       </div>
                     ))
+                    ) : (
+                      <div className="text-center py-8 text-muted-foreground">
+                        No verification records yet. Upload a certificate to get started.
+                      </div>
                     )}
                   </div>
                 </CardContent>

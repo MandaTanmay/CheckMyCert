@@ -1,5 +1,6 @@
 from django.db import models
 from django.contrib.auth import get_user_model
+from django.utils.text import get_valid_filename
 import uuid
 import os
 
@@ -7,7 +8,12 @@ User = get_user_model()
 
 def certificate_upload_path(instance, filename):
     """Generate upload path for certificate files"""
-    return f'certificates/{instance.user.id}/{uuid.uuid4()}/{filename}'
+    base_name, extension = os.path.splitext(filename)
+    safe_base_name = get_valid_filename(base_name)[:40] or "certificate"
+    safe_extension = extension[:10].lower()
+    file_name = f"{uuid.uuid4().hex[:12]}_{safe_base_name}{safe_extension}"
+    user_segment = str(instance.user.id)[:8]
+    return f"certificates/{user_segment}/{file_name}"
 
 def result_upload_path(instance, filename):
     """Generate upload path for result files"""
@@ -26,7 +32,7 @@ class Certificate(models.Model):
     
     # File Information
     original_filename = models.CharField(max_length=255)
-    file = models.FileField(upload_to=certificate_upload_path)
+    file = models.FileField(upload_to=certificate_upload_path, max_length=255)
     file_size = models.PositiveIntegerField()
     file_type = models.CharField(max_length=50)
     

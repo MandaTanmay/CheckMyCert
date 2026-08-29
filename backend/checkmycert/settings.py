@@ -1,6 +1,24 @@
 import os
+import importlib.util
 from pathlib import Path
-from decouple import config
+
+try:
+    from decouple import config as decouple_config  # type: ignore[reportMissingImports]
+except ImportError:
+    def config(key, default=None, cast=str):
+        value = os.getenv(key)
+        if value is None:
+            return default
+
+        if cast is bool:
+            return value.strip().lower() in ('1', 'true', 'yes', 'on')
+
+        if callable(cast):
+            return cast(value)
+
+        return value
+else:
+    config = decouple_config
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -34,8 +52,13 @@ LOCAL_APPS = [
     'apps.users',
     'apps.certificates',
     'apps.institutions',
-    'apps.verification',
 ]
+
+if importlib.util.find_spec('apps.verification') is not None:
+    LOCAL_APPS.append('apps.verification')
+
+if importlib.util.find_spec('apps.dashboard') is not None:
+    LOCAL_APPS.append('apps.dashboard')
 
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
 
@@ -72,16 +95,31 @@ TEMPLATES = [
 WSGI_APPLICATION = 'checkmycert.wsgi.application'
 
 # Database
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.postgresql',
-        'NAME': config('DB_NAME', default='checkmycert'),
-        'USER': config('DB_USER', default='checkmycert'),
-        'PASSWORD': config('DB_PASSWORD', default='checkmycert_password'),
-        'HOST': config('DB_HOST', default='localhost'),
-        'PORT': config('DB_PORT', default='5432'),
+DB_ENGINE = config('DB_ENGINE', default='sqlite').strip().lower()
+
+if DB_ENGINE in ('postgres', 'postgresql'):
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.postgresql',
+            'NAME': config('DB_NAME', default='checkmycert'),
+            'USER': config('DB_USER', default='checkmycert'),
+            'PASSWORD': config('DB_PASSWORD', default='checkmycert_password'),
+            'HOST': config('DB_HOST', default='localhost'),
+            'PORT': config('DB_PORT', default='5432'),
+            'CONN_MAX_AGE': config('DB_CONN_MAX_AGE', default=60, cast=int),
+            'OPTIONS': {
+                'sslmode': config('DB_SSLMODE', default='require'),
+                'connect_timeout': config('DB_CONNECT_TIMEOUT', default=10, cast=int),
+            },
+        }
     }
-}
+else:
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': config('SQLITE_DB_PATH', default=str(BASE_DIR / 'db.sqlite3')),
+        }
+    }
 
 # Password validation
 AUTH_PASSWORD_VALIDATORS = [
@@ -172,6 +210,18 @@ DATA_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024  # 10MB
 
 # Demo Mode
 DEMO_MODE = config('DEMO_MODE', default=False, cast=bool)
+
+# OCR fallback configuration
+OCR_SPACE_API_KEY = config('OCR_SPACE_API_KEY', default='')
+
+# Verification scoring configuration
+CONFIDENCE_WEIGHT_OCR = config('CONFIDENCE_WEIGHT_OCR', default=0.2, cast=float)
+CONFIDENCE_WEIGHT_TAMPER = config('CONFIDENCE_WEIGHT_TAMPER', default=0.4, cast=float)
+CONFIDENCE_WEIGHT_DB_MATCH = config('CONFIDENCE_WEIGHT_DB_MATCH', default=0.3, cast=float)
+CONFIDENCE_WEIGHT_SIGNATURE = config('CONFIDENCE_WEIGHT_SIGNATURE', default=0.1, cast=float)
+
+VERDICT_THRESHOLD_VALID = config('VERDICT_THRESHOLD_VALID', default=80, cast=float)
+VERDICT_THRESHOLD_TAMPERED = config('VERDICT_THRESHOLD_TAMPERED', default=70, cast=float)
 
 # Logging
 LOGGING = {

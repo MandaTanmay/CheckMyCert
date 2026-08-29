@@ -51,6 +51,14 @@ def process_certificate_verification(self, certificate_id):
         # Step 4: Database Matching
         self.update_state(state='PROGRESS', meta={'step': 'database_matching', 'progress': 80})
         database_result = database_matcher.find_matches(ocr_result['extracted_fields'])
+
+        extracted_fields_payload = dict(ocr_result.get('extracted_fields') or {})
+        word_coordinates = ocr_result.get('word_coordinates') or []
+        line_coordinates = ocr_result.get('line_coordinates') or []
+        if word_coordinates:
+            extracted_fields_payload['_word_coordinates'] = word_coordinates
+        if line_coordinates:
+            extracted_fields_payload['_line_coordinates'] = line_coordinates
         
         # Step 5: Generate Overall Result
         self.update_state(state='PROGRESS', meta={'step': 'finalizing', 'progress': 90})
@@ -64,7 +72,7 @@ def process_certificate_verification(self, certificate_id):
             status=overall_status,
             overall_confidence=overall_confidence,
             extracted_text=ocr_result['raw_text'],
-            extracted_fields=ocr_result['extracted_fields'],
+            extracted_fields=extracted_fields_payload,
             ocr_confidence=ocr_result['confidence'],
             tamper_detected=tamper_result['tamper_detected'],
             tamper_confidence=tamper_result['confidence'],

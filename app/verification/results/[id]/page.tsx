@@ -79,10 +79,147 @@ interface VerificationResult {
     }
     confidence: number
   }>
+  lineCoordinates?: Array<{
+    text: string
+    bbox: {
+      x: number
+      y: number
+      width: number
+      height: number
+    }
+    word_count: number
+  }>
+}
+
+function normalizeExtractedFields(raw: any): ExtractedField[] {
+  if (Array.isArray(raw)) {
+    return raw
+  }
+
+  if (!raw || typeof raw !== "object") {
+    return []
+  }
+
+  return Object.entries(raw as Record<string, any>)
+    .filter(([field]) => !field.startsWith("_"))
+    .map(([field, value]) => {
+    if (value && typeof value === "object") {
+      return {
+        field,
+        value: String(value.value ?? ""),
+        confidence: Number(value.confidence ?? 0),
+        coordinates: value.coordinates ?? { x: 0, y: 0, width: 0, height: 0 },
+      }
+    }
+
+    return {
+      field,
+      value: String(value ?? ""),
+      confidence: 0,
+      coordinates: { x: 0, y: 0, width: 0, height: 0 },
+    }
+  })
+}
+
+function normalizeVerificationResult(payload: any): VerificationResult {
+  const extractedFields = normalizeExtractedFields(payload?.extractedFields ?? payload?.extracted_fields)
+
+  const tamperIssues = Array.isArray(payload?.tamperIssues)
+    ? payload.tamperIssues
+    : Array.isArray(payload?.tamper_issues)
+      ? payload.tamper_issues
+      : []
+
+  const wordCoordinates = Array.isArray(payload?.wordCoordinates)
+    ? payload.wordCoordinates
+    : Array.isArray(payload?.word_coordinates)
+      ? payload.word_coordinates
+      : []
+
+  const lineCoordinates = Array.isArray(payload?.lineCoordinates)
+    ? payload.lineCoordinates
+    : Array.isArray(payload?.line_coordinates)
+      ? payload.line_coordinates
+      : []
+
+  const normalizedLineCoordinates = lineCoordinates
+    .filter((line: any) => line && typeof line === "object")
+    .map((line: any) => {
+      const rawBbox = line.bbox && typeof line.bbox === "object" ? line.bbox : null
+      const x = Number(rawBbox?.x ?? line.x ?? 0)
+      const y = Number(rawBbox?.y ?? line.y ?? 0)
+      const width = Number(rawBbox?.width ?? line.width ?? 0)
+      const height = Number(rawBbox?.height ?? line.height ?? 0)
+
+      return {
+        text: String(line.text ?? ""),
+        bbox: {
+          x,
+          y,
+          width,
+          height,
+        },
+        word_count: Number(line.word_count ?? line.wordCount ?? 0),
+      }
+    })
+
+  const rawDatabaseVerification = payload?.databaseVerification ?? payload?.database_verification
+  const hasFlatDatabaseMatch =
+    payload?.databaseMatch !== undefined ||
+    payload?.database_match !== undefined ||
+    payload?.matched_record !== undefined ||
+    payload?.matched_institution !== undefined
+
+  const normalizedDatabaseVerification = rawDatabaseVerification
+    ? {
+        ...rawDatabaseVerification,
+        confidence_score: Number(rawDatabaseVerification?.confidence_score ?? 0),
+        verification_status: (rawDatabaseVerification?.verification_status ?? payload?.status ?? 'unverified') as
+          | 'valid'
+          | 'unverified'
+          | 'tampered',
+      }
+    : hasFlatDatabaseMatch
+      ? {
+          database_match: Boolean(payload?.databaseMatch ?? payload?.database_match ?? false),
+          matched_record: payload?.matched_record ?? null,
+          matched_institution: payload?.matched_institution ?? null,
+          comparison_details: [],
+          confidence_score: Number(payload?.overallConfidence ?? payload?.overall_confidence ?? 0),
+          verification_status: (payload?.status ?? 'unverified') as 'valid' | 'unverified' | 'tampered',
+        }
+      : null
+
+  return {
+    id: String(payload?.id || ""),
+    status: payload?.status || "unverified",
+    overallConfidence: Number(payload?.overallConfidence ?? payload?.overall_confidence ?? 0),
+    extractedFields,
+    tamperIssues,
+    signatureValid: Boolean(payload?.signatureValid ?? payload?.signature_valid ?? false),
+    databaseMatch: Boolean(
+      payload?.databaseMatch ??
+        payload?.database_match ??
+        normalizedDatabaseVerification?.database_match ??
+        false,
+    ),
+    databaseVerification: normalizedDatabaseVerification,
+    qrToken: payload?.qrToken || payload?.qr_token || "",
+    processedAt: payload?.processedAt || payload?.processed_at || payload?.created_at || new Date().toISOString(),
+    extractedText: payload?.extractedText || payload?.extracted_text || "",
+    ocrResult: payload?.ocrResult ?? payload?.ocr_result,
+    certificateImage: payload?.certificateImage ?? payload?.certificate_image ?? null,
+    certificateFilename:
+      payload?.certificateFilename ?? payload?.certificate_filename ?? payload?.certificate?.original_filename ?? null,
+    certificateMimetype: payload?.certificateMimetype ?? payload?.certificate_mimetype ?? payload?.certificate?.file_type ?? null,
+    wordCoordinates,
+    lineCoordinates: normalizedLineCoordinates,
+  }
 }
 
 export default function VerificationResultsPage({ params }: { params: { id: string } }) {
   const [result, setResult] = useState<VerificationResult | null>(null)
+  const [activeTab, setActiveTab] = useState("fields")
   const [selectedField, setSelectedField] = useState<ExtractedField | null>(null)
   const [selectedIssue, setSelectedIssue] = useState<TamperIssue | null>(null)
   const [loading, setLoading] = useState(true)
@@ -91,22 +228,34 @@ export default function VerificationResultsPage({ params }: { params: { id: stri
   const [imageError, setImageError] = useState(false)
   const [showTextHighlights, setShowTextHighlights] = useState(true)
   const [selectedWord, setSelectedWord] = useState<string | null>(null)
+  const [selectedLine, setSelectedLine] = useState<string | null>(null)
   const [imageSize, setImageSize] = useState<{ width: number; height: number } | null>(null)
 
   useEffect(() => {
     const fetchResults = async () => {
       try {
-        const response = await fetch(`/api/verification/results/${params.id}`)
-        if (response.ok) {
+        const maxAttempts = 20
+        let response: Response | null = null
+
+        for (let attempt = 0; attempt < maxAttempts; attempt++) {
+          response = await fetch(`/api/verification/results/${params.id}`)
+          if (response.ok) {
+            break
+          }
+          await new Promise((resolve) => setTimeout(resolve, 1000))
+        }
+
+        if (response?.ok) {
           const data = await response.json()
-          setResult(data)
-          
+          const normalized = normalizeVerificationResult(data)
+          setResult(normalized)
+
           // If we have result data but no database verification, try to fetch it
-          if (data && !data.databaseVerification && data.extractedFields && data.extractedFields.length > 0) {
-            fetchDatabaseVerification(data)
+          if (!normalized.databaseVerification && normalized.extractedFields.length > 0) {
+            fetchDatabaseVerification(normalized)
           }
         } else {
-          console.error("Failed to fetch results:", response.statusText)
+          console.error("Failed to fetch results after retries")
           setResult(null)
         }
       } catch (error) {
@@ -238,6 +387,15 @@ export default function VerificationResultsPage({ params }: { params: { id: stri
     return "text-destructive"
   }
 
+  const isLiveOCRFallbackMode =
+    result.signatureValid === false &&
+    result.tamperIssues.some(
+      (issue) =>
+        issue.type === "processing_unavailable" ||
+        issue.type === "ocr_unavailable" ||
+        issue.type === "ocr_error",
+    )
+
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
@@ -266,6 +424,11 @@ export default function VerificationResultsPage({ params }: { params: { id: stri
             <div>
               <h1 className="text-3xl font-bold text-foreground">Verification Results</h1>
               <p className="text-muted-foreground">Certificate ID: {result.id}</p>
+              {isLiveOCRFallbackMode && (
+                <Badge className="mt-2 bg-amber-100 text-amber-800 border border-amber-300">
+                  LIVE OCR FALLBACK MODE
+                </Badge>
+              )}
             </div>
             <div className="ml-auto">
               <Badge className={getStatusColor()}>{result.status.toUpperCase()}</Badge>
@@ -398,6 +561,11 @@ export default function VerificationResultsPage({ params }: { params: { id: stri
                             {result.wordCoordinates.length} words detected
                           </div>
                         )}
+                        {result.lineCoordinates && result.lineCoordinates.length > 0 && (
+                          <div className="text-xs opacity-90 mt-1">
+                            {result.lineCoordinates.length} stitched lines
+                          </div>
+                        )}
                       </div>
 
                       {/* Text highlighting toggle */}
@@ -467,7 +635,7 @@ export default function VerificationResultsPage({ params }: { params: { id: stri
 
           {/* Details Panel */}
           <div className="space-y-6">
-            <Tabs defaultValue="fields" className="w-full">
+            <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
               <TabsList className="grid w-full grid-cols-5">
                 <TabsTrigger value="fields">Fields</TabsTrigger>
                 <TabsTrigger value="words">Words</TabsTrigger>
@@ -516,6 +684,33 @@ export default function VerificationResultsPage({ params }: { params: { id: stri
                     </CardDescription>
                   </CardHeader>
                   <CardContent>
+                    {result.lineCoordinates && result.lineCoordinates.length > 0 && (
+                      <div className="mb-4">
+                        <p className="text-xs font-medium text-muted-foreground mb-2">Stitched Lines</p>
+                        <div className="grid grid-cols-1 gap-2 max-h-48 overflow-y-auto">
+                          {result.lineCoordinates.map((line, index) => (
+                            <div
+                              key={`line-${index}`}
+                              className={`p-2 rounded border cursor-pointer transition-colors ${
+                                selectedLine === line.text
+                                  ? "border-emerald-500 bg-emerald-50"
+                                  : "border-border hover:border-emerald-400 hover:bg-accent/30"
+                              }`}
+                              onClick={() => setSelectedLine(selectedLine === line.text ? null : line.text)}
+                            >
+                              <div className="flex justify-between items-center">
+                                <span className="font-medium text-sm truncate">{line.text || `Line ${index + 1}`}</span>
+                                <span className="text-xs text-muted-foreground">{line.word_count} words</span>
+                              </div>
+                              <div className="text-xs text-muted-foreground mt-1">
+                                Position: ({line.bbox.x}, {line.bbox.y}) • Size: {line.bbox.width}×{line.bbox.height}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
                     {result.wordCoordinates && result.wordCoordinates.length > 0 ? (
                       <div className="grid grid-cols-1 gap-2 max-h-96 overflow-y-auto">
                         {result.wordCoordinates.map((word, index) => (
@@ -542,10 +737,16 @@ export default function VerificationResultsPage({ params }: { params: { id: stri
                       </div>
                     ) : (
                       <div className="text-center py-6">
-                        <p className="text-muted-foreground">No word coordinates available</p>
-                        <p className="text-xs text-muted-foreground mt-1">
-                          Enable OCR overlay to capture word positions
+                        <p className="text-muted-foreground">
+                          {result.lineCoordinates && result.lineCoordinates.length > 0
+                            ? "Word coordinates unavailable, but stitched line coordinates are available above"
+                            : "No word coordinates available"}
                         </p>
+                        {(!result.lineCoordinates || result.lineCoordinates.length === 0) && (
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Reprocess this certificate to generate OCR overlay coordinates
+                          </p>
+                        )}
                       </div>
                     )}
                   </CardContent>

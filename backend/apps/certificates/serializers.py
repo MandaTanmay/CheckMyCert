@@ -1,5 +1,6 @@
 from rest_framework import serializers
 from .models import Certificate, VerificationResult, BulkVerificationJob, AuditLog
+from apps.institutions.models import Institution, InstitutionDatabase
 
 class CertificateUploadSerializer(serializers.ModelSerializer):
     class Meta:
@@ -23,8 +24,35 @@ class CertificateSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['id', 'uploaded_at', 'processed_at']
 
+
+class InstitutionCompactSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Institution
+        fields = ['id', 'name', 'short_name']
+
+
+class InstitutionRecordSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = InstitutionDatabase
+        fields = [
+            'id',
+            'student_name',
+            'student_id',
+            'certificate_type',
+            'degree_program',
+            'major',
+            'graduation_date',
+            'certificate_number',
+            'gpa',
+        ]
+
 class VerificationResultSerializer(serializers.ModelSerializer):
     certificate = CertificateSerializer(read_only=True)
+    word_coordinates = serializers.SerializerMethodField()
+    line_coordinates = serializers.SerializerMethodField()
+    matched_institution = InstitutionCompactSerializer(read_only=True)
+    matched_record = InstitutionRecordSerializer(read_only=True)
+    database_verification = serializers.SerializerMethodField()
     
     class Meta:
         model = VerificationResult
@@ -33,10 +61,39 @@ class VerificationResultSerializer(serializers.ModelSerializer):
             'extracted_text', 'extracted_fields', 'ocr_confidence',
             'tamper_detected', 'tamper_confidence', 'tamper_issues',
             'tamper_heatmap', 'database_match', 'matched_institution',
+            'matched_record', 'database_verification',
             'signature_valid', 'signature_details', 'qr_token',
+            'word_coordinates', 'line_coordinates',
             'created_at'
         ]
         read_only_fields = ['id', 'created_at']
+
+    def get_word_coordinates(self, obj):
+        extracted_fields = obj.extracted_fields or {}
+        if isinstance(extracted_fields, dict):
+            word_coordinates = extracted_fields.get('_word_coordinates')
+            if isinstance(word_coordinates, list):
+                return word_coordinates
+        return []
+
+    def get_line_coordinates(self, obj):
+        extracted_fields = obj.extracted_fields or {}
+        if isinstance(extracted_fields, dict):
+            line_coordinates = extracted_fields.get('_line_coordinates')
+            if isinstance(line_coordinates, list):
+                return line_coordinates
+        return []
+
+    def get_database_verification(self, obj):
+        confidence = float(obj.overall_confidence or 0)
+        return {
+            'database_match': bool(obj.database_match),
+            'matched_institution': InstitutionCompactSerializer(obj.matched_institution).data if obj.matched_institution else None,
+            'matched_record': InstitutionRecordSerializer(obj.matched_record).data if obj.matched_record else None,
+            'comparison_details': [],
+            'confidence_score': confidence,
+            'verification_status': obj.status,
+        }
 
 class BulkVerificationJobSerializer(serializers.ModelSerializer):
     progress_percentage = serializers.SerializerMethodField()

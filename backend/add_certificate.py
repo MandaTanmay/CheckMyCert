@@ -1,120 +1,94 @@
 #!/usr/bin/env python3
-"""
-Add new certificate record to the database
-"""
+"""Add or update a certificate record using Django ORM (db.sqlite3)."""
 
-import sqlite3
-import uuid
-from datetime import datetime
 import os
+import sys
+from datetime import date
 
-# Get the path to the database
-backend_dir = os.path.dirname(os.path.abspath(__file__))
-db_path = os.path.join(backend_dir, 'certificate_verification.db')
+
+def setup_django():
+    backend_dir = os.path.dirname(os.path.abspath(__file__))
+    if backend_dir not in sys.path:
+        sys.path.insert(0, backend_dir)
+    os.environ.setdefault("DJANGO_SETTINGS_MODULE", "checkmycert.settings")
+
+    import django
+
+    django.setup()
+
 
 def add_new_certificate():
-    """Add the new certificate record to the database"""
-    
-    conn = sqlite3.connect(db_path)
-    conn.row_factory = sqlite3.Row
-    cursor = conn.cursor()
-    
-    # First, add the new institution (SRKR)
+    from apps.institutions.models import Institution, InstitutionDatabase
+
     institution_data = {
-        'id': str(uuid.uuid4()),
-        'name': 'SRKR Engineering College',
-        'short_name': 'SRKR',
-        'institution_type': 'college',
-        'country': 'India',
-        'state_province': 'Andhra Pradesh',
-        'city': 'Bhimavaram',
-        'website': 'https://www.srkr.ac.in',
-        'email': 'registrar@srkr.ac.in',
-        'is_verified': 1
+        "name": "Board of Secondary",
+        "short_name": "BSE",
+        "institution_type": "other",
+        "country": "India",
+        "state_province": "Andhra Pradesh",
+        "city": "Amaravati",
+        "website": None,
+        "email": None,
+        "is_verified": True,
     }
-    
-    # Check if institution already exists
-    cursor.execute("SELECT id FROM institutions WHERE name = ? OR short_name = ?", 
-                   (institution_data['name'], institution_data['short_name']))
-    existing_institution = cursor.fetchone()
-    
-    if existing_institution:
-        institution_id = existing_institution['id']
-        print(f"✓ Institution already exists: {institution_data['name']}")
+
+    institution, created_institution = Institution.objects.get_or_create(
+        name=institution_data["name"],
+        defaults=institution_data,
+    )
+
+    if created_institution:
+        print(f"Added institution: {institution.name}")
     else:
-        cursor.execute('''
-            INSERT INTO institutions (id, name, short_name, institution_type, country, 
-                                   state_province, city, website, email, is_verified)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ''', (institution_data['id'], institution_data['name'], institution_data['short_name'], 
-              institution_data['institution_type'], institution_data['country'], 
-              institution_data['state_province'], institution_data['city'], 
-              institution_data['website'], institution_data['email'], institution_data['is_verified']))
-        
-        institution_id = institution_data['id']
-        print(f"✓ Added new institution: {institution_data['name']}")
-    
-    # Now add the certificate record
+        print(f"Institution already exists: {institution.name}")
+
+    # Mapped from extracted OCR fields.
     certificate_data = {
-        'institution_id': institution_id,
-        'student_name': 'manoj',
-        'student_id': 'SRKR001',
-        'student_email': 'manoj@srkr.ac.in',
-        'certificate_type': 'Bachelor of Technology',
-        'degree_program': 'BTech',
-        'major': 'Engineering',
-        'gpa': 5.0,  # Assuming 5 is the grade on a 10-point scale
-        'enrollment_date': '2021-09-01',  # Estimated
-        'graduation_date': '2025-09-24',
-        'certificate_issued_date': '2025-09-24',
-        'certificate_number': '889889889'
+        "institution": institution,
+        "student_name": "MANDA TANMAY VENKATA SAI LALA GUPTA",
+        "student_id": "2110110462",  # roll_number
+        "student_email": "",
+        "certificate_type": "SSC Examination",  # degree
+        "degree_program": "SSC",
+        "major": "General",
+        "gpa": None,
+        "enrollment_date": None,
+        "graduation_date": date(2021, 8, 6),
+        "certificate_issued_date": date(2021, 8, 6),
+        "certificate_number": "PC/10/09091/141502/M2",  # registration/id
+        "additional_data": {
+            "source": "manual_insert_from_extracted_fields",
+            "roll_number": "2110110462",
+            "institution_raw": "Board of Secondary",
+        },
     }
-    
-    # Check if certificate already exists
-    cursor.execute("SELECT id FROM institution_certificates WHERE certificate_number = ?", 
-                   (certificate_data['certificate_number'],))
-    existing_cert = cursor.fetchone()
-    
-    if existing_cert:
-        print(f"⚠️  Certificate already exists with number: {certificate_data['certificate_number']}")
+
+    record, created_record = InstitutionDatabase.objects.update_or_create(
+        certificate_number=certificate_data["certificate_number"],
+        defaults=certificate_data,
+    )
+
+    if created_record:
+        print(f"Added certificate record for: {record.student_name}")
     else:
-        cursor.execute('''
-            INSERT INTO institution_certificates 
-            (institution_id, student_name, student_id, student_email, certificate_type,
-             degree_program, major, gpa, enrollment_date, graduation_date,
-             certificate_issued_date, certificate_number)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ''', (certificate_data['institution_id'], certificate_data['student_name'], 
-              certificate_data['student_id'], certificate_data['student_email'], 
-              certificate_data['certificate_type'], certificate_data['degree_program'],
-              certificate_data['major'], certificate_data['gpa'], 
-              certificate_data['enrollment_date'], certificate_data['graduation_date'],
-              certificate_data['certificate_issued_date'], certificate_data['certificate_number']))
-        
-        print(f"✓ Added new certificate for: {certificate_data['student_name']}")
-        print(f"  - Institution: {institution_data['name']}")
-        print(f"  - Degree: {certificate_data['certificate_type']} in {certificate_data['degree_program']}")
-        print(f"  - Certificate Number: {certificate_data['certificate_number']}")
-        print(f"  - Graduation Date: {certificate_data['graduation_date']}")
-        print(f"  - Grade: {certificate_data['gpa']}")
-    
-    conn.commit()
-    
-    # Display updated statistics
-    cursor.execute("SELECT COUNT(*) FROM institutions WHERE is_verified = 1")
-    verified_institutions = cursor.fetchone()[0]
-    
-    cursor.execute("SELECT COUNT(*) FROM institution_certificates WHERE is_revoked = 0")
-    active_certificates = cursor.fetchone()[0]
-    
-    print(f"\n📊 Updated Database Statistics:")
-    print(f"   Verified Institutions: {verified_institutions}")
-    print(f"   Active Certificates: {active_certificates}")
-    
-    conn.close()
+        print(f"Updated certificate record for: {record.student_name}")
+
+    print(f"  Institution: {institution.name}")
+    print(f"  Certificate Number: {record.certificate_number}")
+    print(f"  Student ID: {record.student_id}")
+    print(f"  Graduation Date: {record.graduation_date}")
+
+    verified_institutions = Institution.objects.filter(is_verified=True).count()
+    active_certificates = InstitutionDatabase.objects.filter(is_revoked=False).count()
+
+    print("\nUpdated Database Statistics:")
+    print(f"  Verified Institutions: {verified_institutions}")
+    print(f"  Active Certificates: {active_certificates}")
+
 
 if __name__ == "__main__":
-    print("🎓 Adding new certificate to database...")
+    print("Adding certificate to Django database...")
     print("=" * 50)
+    setup_django()
     add_new_certificate()
-    print("✅ Certificate added successfully!")
+    print("Done.")

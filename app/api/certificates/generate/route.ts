@@ -1,7 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { jsPDF } from "jspdf"
 import QRCode from "qrcode"
-import { CertificateDB, type GeneratedCertificate } from "@/lib/certificate-db"
+import { proxyToDjango } from "@/lib/proxy"
 
 interface CertificateData {
   studentName: string
@@ -21,23 +21,27 @@ export async function POST(request: NextRequest) {
   try {
     const certificateData: CertificateData = await request.json()
 
-    // Generate invisible QR code
+    const qrToken = String(certificateData.verificationToken || "").trim()
+    if (!qrToken) {
+      return NextResponse.json({ error: "Verification token is required" }, { status: 400 })
+    }
+
     const qrData = {
-      token: certificateData.verificationToken,
+      token: qrToken,
       system: "CheckMyCert",
       timestamp: certificateData.timestamp,
       certNumber: certificateData.certificateNumber,
-      checksum: generateChecksum(certificateData)
+      checksum: generateChecksum(certificateData),
     }
 
-    // Create QR code as data URL
-    const qrCodeDataUrl = await QRCode.toDataURL(JSON.stringify(qrData), {
-      width: 100,
-      margin: 0,
+    // Create a visible QR code that resolves to the verification token.
+    const qrCodeDataUrl = await QRCode.toDataURL(qrToken, {
+      width: 180,
+      margin: 1,
       color: {
-        dark: '#FFFFFF01', // Almost transparent (invisible)
-        light: '#FFFFFF00' // Completely transparent
-      }
+        dark: '#0B4F8A',
+        light: '#FFFFFF',
+      },
     })
 
     // Create PDF certificate
@@ -102,11 +106,12 @@ export async function POST(request: NextRequest) {
     // Issued by
     pdf.text(`Issued by: ${certificateData.issuedBy}`, 200, 175)
 
-    // Add invisible QR code (bottom right corner)
+    // Add visible QR code (bottom right corner)
     try {
-      // Convert QR code data URL to image and add to PDF
-      const qrImage = qrCodeDataUrl.split(',')[1] // Remove data URL prefix
-      pdf.addImage(qrCodeDataUrl, 'PNG', 250, 170, 30, 30, undefined, 'NONE')
+      pdf.addImage(qrCodeDataUrl, 'PNG', 245, 155, 36, 36, undefined, 'NONE')
+      pdf.setFontSize(8)
+      pdf.setTextColor(80, 80, 80)
+      pdf.text(`Verify Token: ${qrToken}`, 225, 195)
     } catch (qrError) {
       console.error('QR code embedding error:', qrError)
     }
@@ -119,27 +124,50 @@ export async function POST(request: NextRequest) {
     // Generate PDF as buffer
     const pdfBuffer = pdf.output('arraybuffer')
 
-    // Store certificate data in database
-    const certificateRecord: GeneratedCertificate = {
-      id: certificateData.verificationToken,
-      verificationToken: certificateData.verificationToken,
-      studentName: certificateData.studentName,
-      course: certificateData.course,
-      institution: certificateData.institution,
-      graduationDate: certificateData.graduationDate,
-      grade: certificateData.grade,
-      certificateNumber: certificateData.certificateNumber,
-      issuedBy: certificateData.issuedBy,
-      additionalNotes: certificateData.additionalNotes,
-      createdBy: certificateData.createdBy,
-      createdAt: certificateData.timestamp,
-      isValid: true,
-      qrData: JSON.stringify(qrData),
-      checksum: qrData.checksum
+    // Persist generated certificate artifact in Django so no token state is kept in Next.js memory.
+    const uploadFormData = new FormData()
+    const fileName = `${certificateData.certificateNumber || certificateData.verificationToken}.pdf`
+    const pdfFile = new File([pdfBuffer], fileName, { type: "application/pdf" })
+    uploadFormData.append("file", pdfFile)
+    uploadFormData.append("ocr_language", "eng")
+    uploadFormData.append("translate_enabled", "false")
+
+    const persistResponse = await proxyToDjango(request, {
+      djangoPath: "/api/certificates/upload/",
+      method: "POST",
+      body: uploadFormData,
+      requireAuth: true,
+    })
+
+    if (!persistResponse.ok) {
+      return persistResponse
     }
 
-    // Store in database
-    CertificateDB.storeCertificate(certificateRecord)
+    const persistPayload = await persistResponse.json()
+
+    // Persist generated certificate form data into institutional DB.
+    const saveRecordResponse = await proxyToDjango(request, {
+      djangoPath: "/api/certificates/generated-record/",
+      method: "POST",
+      body: JSON.stringify({
+        student_name: certificateData.studentName,
+        degree: certificateData.course,
+        institution: certificateData.institution,
+        graduation_date: certificateData.graduationDate,
+        grade: certificateData.grade,
+        certificate_number: certificateData.certificateNumber,
+        issued_by: certificateData.issuedBy,
+        additional_notes: certificateData.additionalNotes,
+        created_by: certificateData.createdBy,
+      }),
+      requireAuth: true,
+    })
+
+    if (!saveRecordResponse.ok) {
+      return saveRecordResponse
+    }
+
+    const saveRecordPayload = await saveRecordResponse.json()
 
     // Return PDF as downloadable file
     const pdfBase64 = Buffer.from(pdfBuffer).toString('base64')
@@ -149,7 +177,10 @@ export async function POST(request: NextRequest) {
       success: true,
       downloadUrl,
       verificationToken: certificateData.verificationToken,
-      message: "Certificate generated successfully with invisible QR code"
+      checksum: qrData.checksum,
+      job_id: persistPayload?.job_id,
+      generated_record: saveRecordPayload,
+      message: "Certificate generated successfully with visible QR code"
     })
 
   } catch (error) {

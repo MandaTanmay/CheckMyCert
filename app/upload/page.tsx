@@ -11,8 +11,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import RoleBasedNavigation from "@/components/role-based-nav"
-import { useUser } from "@/components/role-guard"
+import Link from "next/link"
 
 interface UploadedFile {
   file: File
@@ -27,8 +26,38 @@ interface ProcessingStep {
   message?: string
 }
 
+const OCR_TO_TRANSLATE_LANGUAGE: Record<string, string> = {
+  eng: "english",
+  spa: "spanish",
+  fre: "french",
+  ger: "german",
+}
+
+const extractErrorMessage = (payload: unknown): string | null => {
+  if (!payload) return null
+  if (typeof payload === "string") return payload
+
+  if (Array.isArray(payload)) {
+    for (const item of payload) {
+      const nested = extractErrorMessage(item)
+      if (nested) return nested
+    }
+    return null
+  }
+
+  if (typeof payload === "object") {
+    const record = payload as Record<string, unknown>
+    for (const value of Object.values(record)) {
+      const nested = extractErrorMessage(value)
+      if (nested) return nested
+    }
+    return null
+  }
+
+  return null
+}
+
 export default function UploadPage() {
-  const { user } = useUser()
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([])
   const [selectedLanguage, setSelectedLanguage] = useState("eng")
   const [translateTo, setTranslateTo] = useState("english")
@@ -101,17 +130,17 @@ export default function UploadPage() {
     setProcessingSteps(steps)
 
     try {
-      const token = localStorage.getItem("token")
       const formData = new FormData()
 
       // Add files
-      uploadedFiles.forEach((uploadedFile, index) => {
-        formData.append("files", uploadedFile.file)
-      })
+      // Backend upload endpoint expects a single file field named "file".
+      formData.append("file", uploadedFiles[0].file)
 
       // Add processing options
       formData.append("ocr_language", selectedLanguage)
-      formData.append("translate_enabled", translateTo !== selectedLanguage ? "true" : "false")
+      const detectedLanguageName = OCR_TO_TRANSLATE_LANGUAGE[selectedLanguage]
+      const shouldTranslate = detectedLanguageName ? translateTo !== detectedLanguageName : true
+      formData.append("translate_enabled", shouldTranslate ? "true" : "false")
       formData.append("translate_to", translateTo)
       formData.append("ocr_enabled", ocrEnabled.toString())
       formData.append("tamper_detection", tamperDetection.toString())
@@ -124,13 +153,21 @@ export default function UploadPage() {
       const uploadResponse = await fetch("/api/certificates/upload", {
         method: "POST",
         body: formData,
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
       })
 
       if (!uploadResponse.ok) {
-        throw new Error("Failed to upload certificate")
+        let message = "Failed to upload certificate"
+        try {
+          const errorData = await uploadResponse.json()
+          message =
+            errorData?.error ||
+            errorData?.detail ||
+            extractErrorMessage(errorData) ||
+            message
+        } catch {
+          // Use default message when backend response is not JSON.
+        }
+        throw new Error(message)
       }
 
       const uploadResult = await uploadResponse.json()
@@ -174,10 +211,20 @@ export default function UploadPage() {
 
       setUploadProgress(100)
 
-      // Redirect to results
-      setTimeout(() => {
-        window.location.href = `/verification/results/${uploadResult.job_id}`
-      }, 1000)
+      // Wait briefly for async result creation, then navigate.
+      const waitForResultReady = async (id: string, maxAttempts = 15) => {
+        for (let attempt = 0; attempt < maxAttempts; attempt++) {
+          const response = await fetch(`/api/verification/results/${id}`)
+          if (response.ok) {
+            return true
+          }
+          await new Promise((resolve) => setTimeout(resolve, 1000))
+        }
+        return false
+      }
+
+      await waitForResultReady(uploadResult.job_id)
+      window.location.href = `/verification/results/${uploadResult.job_id}`
     } catch (err) {
       console.error("Verification error:", err)
       setError(err instanceof Error ? err.message : "Failed to process certificate. Please try again.")
@@ -223,7 +270,19 @@ export default function UploadPage() {
 
   return (
     <div className="min-h-screen bg-background">
-      <RoleBasedNavigation />
+      <header className="border-b border-border bg-card/50 backdrop-blur-sm">
+        <div className="container mx-auto px-4 py-4 flex items-center justify-between">
+          <Link href="/" className="flex items-center gap-2">
+            <Shield className="h-8 w-8 text-primary" />
+            <span className="text-2xl font-bold text-foreground">CheckMyCert</span>
+          </Link>
+          <nav className="flex items-center gap-4">
+            <Link href="/dashboard" className="text-muted-foreground hover:text-foreground transition-colors">
+              Dashboard
+            </Link>
+          </nav>
+        </div>
+      </header>
 
       <div className="container mx-auto px-4 py-8 max-w-4xl">
         <div className="text-center mb-8">
